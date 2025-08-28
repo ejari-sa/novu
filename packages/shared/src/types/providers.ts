@@ -47,6 +47,7 @@ export enum CredentialsKeyEnum {
   ApiVersion = 'apiVersion',
   AppSid = 'appSid',
   SenderId = 'senderId',
+  AccessSecret = 'accessSecret',
 }
 
 export enum EmailProviderIdEnum {
@@ -123,6 +124,7 @@ export enum ChatProviderIdEnum {
   RocketChat = 'rocket-chat',
   WhatsAppBusiness = 'whatsapp-business',
   ChatWebhook = 'chat-webhook',
+  Maqsam = 'maqsam',
 }
 
 export enum PushProviderIdEnum {

@@ -844,6 +844,21 @@ export const maqsamConfig: IConfigCredentials[] = [
   ...smsConfigBase,
 ];
 
+export const maqsamChatConfig: IConfigCredentials[] = [
+  {
+    key: CredentialsKeyEnum.AccessKey,
+    displayName: 'Access Key',
+    type: 'string',
+    required: true,
+  },
+  {
+    key: CredentialsKeyEnum.AccessSecret,
+    displayName: 'Access Secret',
+    type: 'string',
+    required: true,
+  }
+];
+
 export const smsCentralConfig: IConfigCredentials[] = [
   {
     key: CredentialsKeyEnum.User,

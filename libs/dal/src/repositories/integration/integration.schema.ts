@@ -64,6 +64,7 @@ const integrationSchema = new Schema<IntegrationDBModel>(
       accessKey: Schema.Types.String,
       appSid: Schema.Types.String,
       senderId: Schema.Types.String,
+      accessSecret: Schema.Types.String,
     },
     active: {
       type: Schema.Types.Boolean,
