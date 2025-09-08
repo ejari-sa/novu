@@ -169,6 +169,10 @@ jobs:
             cd src/ && echo -e "\nIS_SELF_HOSTED=true\nNOVU_ENTERPRISE=true" >> .example.env && cd ..
           fi
 
+          if [ "${{ env.SERVICE_COMMON_NAME }}" == "dashboard" ]; then
+            echo -e "\nVITE_SELF_HOSTED=true" >> .env
+          fi
+
           # Switch from PM2 cluster mode to single node process to support K8s deployments
           if [[ "$SERVICE_COMMON_NAME" =~ ^(api|worker|ws)$ ]]; then
             echo "Switching $SERVICE_COMMON_NAME from PM2 cluster mode to single node process to support K8s deployments"
