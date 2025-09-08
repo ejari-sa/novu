@@ -170,7 +170,7 @@ jobs:
           fi
 
           if [ "${{ env.SERVICE_COMMON_NAME }}" == "dashboard" ]; then
-            echo -e "\nVITE_SELF_HOSTED=true" >> .env
+            echo -e "\nVITE_SELF_HOSTED=true\nVITE_LAUNCH_DARKLY_CLIENT_SIDE_ID=68beee7641606909b5b6f5db" >> .env
           fi
 
           # Switch from PM2 cluster mode to single node process to support K8s deployments
