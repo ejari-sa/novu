@@ -51,9 +51,9 @@ export class MaqsamWhatsAppProvider extends BaseProvider implements IChatProvide
       params: payload.body,
     });
 
-    if ('message_status' in data && 'message_id' in data && data.message_status === 'submitted') {
+    if ('conversationId' in data && data.conversationId) {
       return {
-        id: data.message_id,
+        id: data.conversationId,
         date: new Date().toISOString(),
       };
     }
