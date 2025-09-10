@@ -1,7 +1,7 @@
 import axios from 'axios';
 import FormData from 'form-data';
 import { createReadStream } from 'fs';
-import { MasterJsonResponse, UploadResponse } from './types';
+import { MasterJsonResponse, OrganizationSettingsResponse, UploadResponse } from './types';
 
 export class TranslationClient {
   constructor(
@@ -57,13 +57,28 @@ export class TranslationClient {
           throw new Error('Invalid API key. Please check your secret key.');
         }
         if (error.response?.status === 400) {
+          const apiMessage = error.response?.data?.message || error.response?.data?.error || 'Invalid request format';
+          throw new Error(`Bad request: ${apiMessage}`);
+        }
+        if (error.response?.status === 404) {
+          throw new Error('Upload endpoint not found. Please check your API URL.');
+        }
+        if (error.response?.status >= 500) {
           throw new Error(
-            `Invalid file format: ${error.response?.data?.message || 'Please ensure the file is valid JSON'}`
+            `Server error (${error.response.status}): ${error.response?.data?.message || 'Internal server error'}`
           );
         }
-        throw new Error(`Upload failed: ${error.response?.data?.message || error.message}`);
+
+        const apiMessage =
+          error.response?.data?.message || error.response?.data?.error || error.message || 'Request failed';
+        throw new Error(`Upload failed (${error.response?.status || 'unknown'}): ${apiMessage}`);
       }
-      throw error;
+
+      if (error instanceof Error) {
+        throw new Error(`Network error: ${error.message}`);
+      }
+
+      throw new Error('Unknown upload error occurred');
     }
   }
 
@@ -82,6 +97,29 @@ export class TranslationClient {
         throw new Error(`Connection failed: ${error.response?.data?.message || error.message}`);
       }
       throw error;
+    }
+  }
+
+  async getOrganizationSettings(): Promise<OrganizationSettingsResponse> {
+    try {
+      const response = await axios.get(`${this.apiUrl}/v1/organizations/settings`, {
+        headers: this.getHeaders(),
+      });
+
+      return response.data;
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        if (error.response?.status === 401) {
+          throw new Error('Invalid API key. Please check your secret key.');
+        }
+        if (error.response?.status === 404) {
+          throw new Error('Organization settings not found. Please ensure your API key has proper permissions.');
+        }
+        const apiMessage =
+          error.response?.data?.message || error.response?.data?.error || 'Failed to fetch organization settings';
+        throw new Error(`Settings API error: ${apiMessage}`);
+      }
+      throw new Error(`Network error: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 }

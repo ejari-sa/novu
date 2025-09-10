@@ -20,6 +20,33 @@ export async function pushTranslations(options: TranslationCommandOptions): Prom
     throw error;
   }
 
+  // Fetch organization settings to get configured locales
+  const settingsSpinner = ora('Fetching organization locale settings...').start();
+  let targetLocales: string[];
+  let defaultLocale: string;
+
+  try {
+    const settings = await client.getOrganizationSettings();
+    defaultLocale = settings.data.defaultLocale;
+    targetLocales = [defaultLocale, ...settings.data.targetLocales];
+
+    // Remove duplicates in case defaultLocale is also in targetLocales
+    targetLocales = [...new Set(targetLocales)];
+
+    settingsSpinner.succeed(`Found ${targetLocales.length} configured locales (default: ${defaultLocale})`);
+  } catch (error) {
+    settingsSpinner.warn('Organization settings not available, allowing all locales');
+    console.log('💡 This might be because:');
+    console.log('  • The API endpoint is not available in your environment');
+    console.log("  • Your API key doesn't have the required permissions");
+    console.log("  • You're using a local development environment");
+
+    // Fallback: allow all locales (no filtering)
+    defaultLocale = 'en_US';
+    targetLocales = []; // Empty array means no filtering will be applied
+    console.log('\n🌍 All translation files will be uploaded without locale validation');
+  }
+
   // Load translation files
   const loadingSpinner = ora(`Loading translation files from: ${options.directory}`).start();
   let translationFiles: Awaited<ReturnType<typeof loadTranslationFiles>>;
@@ -30,6 +57,24 @@ export async function pushTranslations(options: TranslationCommandOptions): Prom
   } catch (error) {
     loadingSpinner.fail('Failed to load translation files');
     throw error;
+  }
+
+  // Filter files to only include configured locales (if we have locale restrictions)
+  if (targetLocales.length > 0) {
+    const validFiles = translationFiles.filter((file) => targetLocales.includes(file.locale));
+    const invalidFiles = translationFiles.filter((file) => !targetLocales.includes(file.locale));
+
+    if (invalidFiles.length > 0) {
+      console.log(`\n⚠️  Skipping ${invalidFiles.length} files with unconfigured locales:`);
+      for (const file of invalidFiles) {
+        console.log(`  • ${file.locale}.json (not in organization settings)`);
+      }
+      console.log(`\n🌍 Configured locales: ${targetLocales.join(', ')}`);
+    }
+
+    translationFiles = validFiles;
+  } else {
+    console.log(`\n📁 Processing all ${translationFiles.length} translation files found`);
   }
 
   if (translationFiles.length === 0) {
@@ -56,18 +101,26 @@ export async function pushTranslations(options: TranslationCommandOptions): Prom
       const response = await client.uploadMasterJson(file.filePath);
 
       if (response.success) {
-        spinner.succeed(
-          `${file.locale} → ${formatFileSize(stats.size)} (${response.imported || 0} translations imported)`
-        );
+        const importedCount = response.successful?.length || 0;
+        spinner.succeed(`${file.locale} → ${formatFileSize(stats.size)} (${importedCount} resources imported)`);
         successCount++;
-        totalImported += response.imported || 0;
+        totalImported += importedCount;
       } else {
-        spinner.fail(`${file.locale} → ${response.message}`);
-        errors.push(`${file.locale}: ${response.message}`);
+        spinner.fail(`${file.locale} → ${response.message || 'Upload failed'}`);
+        errors.push(`${file.locale}: ${response.message || 'Upload failed'}`);
         errorCount++;
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      let errorMessage = 'Unknown error';
+
+      if (error instanceof Error) {
+        errorMessage = error.message || 'Request failed without error message';
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error && typeof error === 'object') {
+        errorMessage = JSON.stringify(error);
+      }
+
       spinner.fail(`${file.locale} → ${errorMessage}`);
       errors.push(`${file.locale}: ${errorMessage}`);
       errorCount++;

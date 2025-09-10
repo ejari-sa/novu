@@ -3,29 +3,6 @@ import { TranslationClient } from './client';
 import { TranslationCommandOptions } from './types';
 import { formatFileSize, saveTranslationFile } from './utils';
 
-const DEFAULT_LOCALES = [
-  'en_US',
-  'en_GB',
-  'es_ES',
-  'fr_FR',
-  'de_DE',
-  'it_IT',
-  'pt_BR',
-  'ja_JP',
-  'ko_KR',
-  'zh_CN',
-  'zh_TW',
-  'ru_RU',
-  'ar_SA',
-  'hi_IN',
-  'nl_NL',
-  'sv_SE',
-  'da_DK',
-  'no_NO',
-  'fi_FI',
-  'pl_PL',
-];
-
 export async function pullTranslations(options: TranslationCommandOptions): Promise<void> {
   if (!options.secretKey) {
     throw new Error('Secret key is required. Use -s flag or set NOVU_SECRET_KEY environment variable.');
@@ -43,13 +20,41 @@ export async function pullTranslations(options: TranslationCommandOptions): Prom
     throw error;
   }
 
+  // Fetch organization settings to get configured locales
+  const settingsSpinner = ora('Fetching organization locale settings...').start();
+  let targetLocales: string[];
+  let defaultLocale: string;
+
+  try {
+    const settings = await client.getOrganizationSettings();
+    defaultLocale = settings.data.defaultLocale;
+    targetLocales = [defaultLocale, ...settings.data.targetLocales];
+
+    // Remove duplicates in case defaultLocale is also in targetLocales
+    targetLocales = [...new Set(targetLocales)];
+
+    settingsSpinner.succeed(`Found ${targetLocales.length} configured locales (default: ${defaultLocale})`);
+  } catch (error) {
+    settingsSpinner.warn('Organization settings not available, using default locales');
+    console.log('💡 This might be because:');
+    console.log('  • The API endpoint is not available in your environment');
+    console.log("  • Your API key doesn't have the required permissions");
+    console.log("  • You're using a local development environment");
+
+    // Fallback to common locales
+    defaultLocale = 'en_US';
+    targetLocales = ['en_US', 'es_ES', 'fr_FR', 'de_DE', 'it_IT', 'pt_BR'];
+    console.log(`\n🌍 Using fallback locales: ${targetLocales.join(', ')}`);
+  }
+
   console.log(`📥 Pulling translations to: ${options.directory}`);
+  console.log(`🌍 Locales: ${targetLocales.join(', ')}`);
 
   let successCount = 0;
   let errorCount = 0;
   const errors: string[] = [];
 
-  for (const locale of DEFAULT_LOCALES) {
+  for (const locale of targetLocales) {
     const spinner = ora(`Fetching ${locale}...`).start();
 
     try {

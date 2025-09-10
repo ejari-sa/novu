@@ -12,8 +12,18 @@ export interface MasterJsonResponse {
 export interface UploadResponse {
   success: boolean;
   message: string;
-  imported: number;
-  errors?: string[];
+  successful?: string[];
+  failed?: string[];
+}
+
+export interface OrganizationSettings {
+  removeNovuBranding: boolean;
+  defaultLocale: string;
+  targetLocales: string[];
+}
+
+export interface OrganizationSettingsResponse {
+  data: OrganizationSettings;
 }
 
 export interface TranslationFile {
