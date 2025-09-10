@@ -35,16 +35,16 @@ export async function pullTranslations(options: TranslationCommandOptions): Prom
 
     settingsSpinner.succeed(`Found ${targetLocales.length} configured locales (default: ${defaultLocale})`);
   } catch (error) {
-    settingsSpinner.warn('Organization settings not available, using default locales');
-    console.log('💡 This might be because:');
-    console.log('  • The API endpoint is not available in your environment');
-    console.log("  • Your API key doesn't have the required permissions");
-    console.log("  • You're using a local development environment");
-
-    // Fallback to common locales
-    defaultLocale = 'en_US';
-    targetLocales = ['en_US', 'es_ES', 'fr_FR', 'de_DE', 'it_IT', 'pt_BR'];
-    console.log(`\n🌍 Using fallback locales: ${targetLocales.join(', ')}`);
+    settingsSpinner.fail('Organization settings not available');
+    console.log('\n🚫 Unable to fetch organization locale settings.');
+    console.log('\n💡 To use translations, you need to:');
+    console.log('  1. Go to your Novu Dashboard');
+    console.log('  2. Navigate to the Translations page');
+    console.log('  3. Enable translations and configure your target locales');
+    console.log('  4. Set your default locale');
+    console.log('\n📖 Learn more: https://docs.novu.co/platform/workflow/translations');
+    
+    throw new Error('Translations not configured. Please enable translations in your dashboard first.');
   }
 
   console.log(`📥 Pulling translations to: ${options.directory}`);

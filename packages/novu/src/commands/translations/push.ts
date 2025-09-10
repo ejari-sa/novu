@@ -35,16 +35,16 @@ export async function pushTranslations(options: TranslationCommandOptions): Prom
 
     settingsSpinner.succeed(`Found ${targetLocales.length} configured locales (default: ${defaultLocale})`);
   } catch (error) {
-    settingsSpinner.warn('Organization settings not available, allowing all locales');
-    console.log('💡 This might be because:');
-    console.log('  • The API endpoint is not available in your environment');
-    console.log("  • Your API key doesn't have the required permissions");
-    console.log("  • You're using a local development environment");
-
-    // Fallback: allow all locales (no filtering)
-    defaultLocale = 'en_US';
-    targetLocales = []; // Empty array means no filtering will be applied
-    console.log('\n🌍 All translation files will be uploaded without locale validation');
+    settingsSpinner.fail('Organization settings not available');
+    console.log('\n🚫 Unable to fetch organization locale settings.');
+    console.log('\n💡 To use translations, you need to:');
+    console.log('  1. Go to your Novu Dashboard');
+    console.log('  2. Navigate to the Translations page');
+    console.log('  3. Enable translations and configure your target locales');
+    console.log('  4. Set your default locale');
+    console.log('\n📖 Learn more: https://docs.novu.co/platform/workflow/translations');
+    
+    throw new Error('Translations not configured. Please enable translations in your dashboard first.');
   }
 
   // Load translation files
@@ -59,23 +59,19 @@ export async function pushTranslations(options: TranslationCommandOptions): Prom
     throw error;
   }
 
-  // Filter files to only include configured locales (if we have locale restrictions)
-  if (targetLocales.length > 0) {
-    const validFiles = translationFiles.filter((file) => targetLocales.includes(file.locale));
-    const invalidFiles = translationFiles.filter((file) => !targetLocales.includes(file.locale));
+  // Filter files to only include configured locales
+  const validFiles = translationFiles.filter((file) => targetLocales.includes(file.locale));
+  const invalidFiles = translationFiles.filter((file) => !targetLocales.includes(file.locale));
 
-    if (invalidFiles.length > 0) {
-      console.log(`\n⚠️  Skipping ${invalidFiles.length} files with unconfigured locales:`);
-      for (const file of invalidFiles) {
-        console.log(`  • ${file.locale}.json (not in organization settings)`);
-      }
-      console.log(`\n🌍 Configured locales: ${targetLocales.join(', ')}`);
+  if (invalidFiles.length > 0) {
+    console.log(`\n⚠️  Skipping ${invalidFiles.length} files with unconfigured locales:`);
+    for (const file of invalidFiles) {
+      console.log(`  • ${file.locale}.json (not in organization settings)`);
     }
-
-    translationFiles = validFiles;
-  } else {
-    console.log(`\n📁 Processing all ${translationFiles.length} translation files found`);
+    console.log(`\n🌍 Configured locales: ${targetLocales.join(', ')}`);
   }
+
+  translationFiles = validFiles;
 
   if (translationFiles.length === 0) {
     console.log('\n💡 No translation files found. Expected format:');
