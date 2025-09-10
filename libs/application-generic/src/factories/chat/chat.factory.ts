@@ -13,6 +13,7 @@ import { SlackHandler } from './handlers/slack.handler';
 import { WhatsAppBusinessHandler } from './handlers/whatsapp-business.handler';
 import { ZulipHandler } from './handlers/zulip.handler';
 import { IChatFactory, IChatHandler } from './interfaces';
+import { MaqsamChatHandler } from './handlers/maqsam.handler';
 
 export class ChatFactory implements IChatFactory {
   handlers: IChatHandler[] = [
