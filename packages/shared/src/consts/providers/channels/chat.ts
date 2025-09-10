@@ -110,8 +110,8 @@ export const chatProviders: IProviderConfig[] = [
     betaVersion: true,
   },
   {
-    id: ChatProviderIdEnum.Maqsam,
-    displayName: 'Maqsam',
+    id: ChatProviderIdEnum.MaqsamWhatsApp,
+    displayName: 'Maqsam WhatsApp',
     channel: ChannelTypeEnum.CHAT,
     credentials: maqsamChatConfig,
     docReference: 'https://portal.maqsam.com/docs/v2/whatsapp',
