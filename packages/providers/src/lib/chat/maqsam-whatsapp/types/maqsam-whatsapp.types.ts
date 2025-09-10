@@ -1,7 +1,7 @@
 export interface ISendMessageRes {
-  message_id: string;
-  message_status: string;
-  conversation_id: string;
+  conversationId: string;
+  messageStatus: string;
+  result: string;
 }
 
 export interface ISendMessageFailureRes {
