@@ -7,10 +7,10 @@ import {
 import Axios, { AxiosInstance } from 'axios';
 import { BaseProvider, CasingEnum } from "../../../base.provider";
 import { WithPassthrough } from "../../../utils/types";
-import { ISendMessageFailureRes, ISendMessageRes } from "./types/maqsam.types";
+import { ISendMessageFailureRes, ISendMessageRes } from "./types/maqsam-whatsapp.types";
 
-export class MaqsamChatProvider extends BaseProvider implements IChatProvider {
-  id = "maqsam";
+export class MaqsamWhatsAppProvider extends BaseProvider implements IChatProvider {
+  id = "maqsam-whatsapp";
   channelType = ChannelTypeEnum.CHAT as ChannelTypeEnum.CHAT;
   protected casing: CasingEnum = CasingEnum.CAMEL_CASE;
 

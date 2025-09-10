@@ -3,6 +3,7 @@ import { ChatWebhookHandler } from './handlers/chat-webhook.handler';
 import { DiscordHandler } from './handlers/discord.handler';
 import { GetstreamChatHandler } from './handlers/getstream.handler';
 import { GrafanaOnCallHandler } from './handlers/grafana-on-call.handler';
+import { MaqsamWhatsAppHandler } from './handlers/maqsam.handler';
 import { MattermostHandler } from './handlers/mattermost.handler';
 import { MSTeamsHandler } from './handlers/msteams.handler';
 import { NovuSlackHandler } from './handlers/novu-slack.handler';
@@ -12,7 +13,6 @@ import { SlackHandler } from './handlers/slack.handler';
 import { WhatsAppBusinessHandler } from './handlers/whatsapp-business.handler';
 import { ZulipHandler } from './handlers/zulip.handler';
 import { IChatFactory, IChatHandler } from './interfaces';
-import { MaqsamChatHandler } from './handlers/maqsam.handler';
 
 export class ChatFactory implements IChatFactory {
   handlers: IChatHandler[] = [
@@ -28,7 +28,7 @@ export class ChatFactory implements IChatFactory {
     new GetstreamChatHandler(),
     new RocketChatHandler(),
     new WhatsAppBusinessHandler(),
-    new MaqsamChatHandler(),
+    new MaqsamWhatsAppHandler(),
   ];
 
   getHandler(integration: Pick<IntegrationEntity, 'credentials' | 'channel' | 'providerId' | 'configurations'>) {

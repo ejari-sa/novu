@@ -2,7 +2,7 @@ import { IChatOptions } from '@novu/stateless';
 import { nanoid } from 'nanoid';
 import { expect, test } from 'vitest';
 import { axiosSpy } from '../../../utils/test/spy-axios';
-import { MaqsamChatProvider } from './maqsam.provider';
+import { MaqsamWhatsAppProvider } from './maqsam-whatsapp.provider';
 
 const mockProviderConfig = {
   accessKey: 'my-access-key',
@@ -23,7 +23,7 @@ test('should trigger maqsam library correctly with template message', async () =
 
   const { mockPost, axiosMockSpy } = axiosSpy(buildResponse(messageId));
 
-  const provider = new MaqsamChatProvider(mockProviderConfig);
+  const provider = new MaqsamWhatsAppProvider(mockProviderConfig);
 
   const options: IChatOptions = {
     phoneNumber: '+111111111',
@@ -65,7 +65,7 @@ test('should trigger maqsam library correctly with template message with _passth
 
   const { mockPost, axiosMockSpy } = axiosSpy(buildResponse(messageId));
 
-  const provider = new MaqsamChatProvider(mockProviderConfig);
+  const provider = new MaqsamWhatsAppProvider(mockProviderConfig);
 
   const options: IChatOptions = {
     phoneNumber: '+111111111',
@@ -126,7 +126,7 @@ test('should throw error when message status is not submitted', async () => {
     },
   });
 
-  const provider = new MaqsamChatProvider(mockProviderConfig);
+  const provider = new MaqsamWhatsAppProvider(mockProviderConfig);
 
   const options: IChatOptions = {
     phoneNumber: '+111111111',
