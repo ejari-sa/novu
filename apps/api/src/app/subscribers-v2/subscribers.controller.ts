@@ -269,6 +269,7 @@ export class SubscribersController {
   @SdkMethodName('list')
   @RequirePermissions(PermissionsEnum.SUBSCRIBER_READ)
   @RequireAuthentication()
+  @ApiExcludeEndpoint()
   async getSubscriberPreferences(
     @UserSession() user: UserSessionData,
     @Param('subscriberId') subscriberId: string,
@@ -292,7 +293,7 @@ export class SubscribersController {
   })
   @ApiResponse(SubscriberGlobalPreferenceDto)
   @SdkGroupName('Subscribers.Preferences')
-  @SdkMethodName('list')
+  @SdkMethodName('getGlobal')
   @RequirePermissions(PermissionsEnum.SUBSCRIBER_READ)
   @RequireAuthentication()
   async getGlobalPreference(
