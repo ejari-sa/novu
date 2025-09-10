@@ -100,14 +100,14 @@ export async function pushTranslations(options: TranslationCommandOptions): Prom
       const stats = await import('fs').then((fs) => fs.promises.stat(file.filePath));
       const response = await client.uploadMasterJson(file.filePath);
 
-      if (response.success) {
-        const importedCount = response.successful?.length || 0;
+      if (response.data.success) {
+        const importedCount = response.data.successful?.length || 0;
         spinner.succeed(`${file.locale} → ${formatFileSize(stats.size)} (${importedCount} resources imported)`);
         successCount++;
         totalImported += importedCount;
       } else {
-        spinner.fail(`${file.locale} → ${response.message || 'Upload failed'}`);
-        errors.push(`${file.locale}: ${response.message || 'Upload failed'}`);
+        spinner.fail(`${file.locale} → ${response.data.message || 'Upload failed'}`);
+        errors.push(`${file.locale}: ${response.data.message || 'Upload failed'}`);
         errorCount++;
       }
     } catch (error) {

@@ -9,11 +9,15 @@ export interface MasterJsonResponse {
   locale: string;
 }
 
-export interface UploadResponse {
+export interface UploadResponseData {
   success: boolean;
   message: string;
   successful?: string[];
   failed?: string[];
+}
+
+export interface UploadResponse {
+  data: UploadResponseData;
 }
 
 export interface OrganizationSettings {
