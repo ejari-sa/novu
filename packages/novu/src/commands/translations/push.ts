@@ -43,7 +43,7 @@ export async function pushTranslations(options: TranslationCommandOptions): Prom
     console.log('  3. Enable translations and configure your target locales');
     console.log('  4. Set your default locale');
     console.log('\n📖 Learn more: https://docs.novu.co/platform/workflow/translations');
-    
+
     throw new Error('Translations not configured. Please enable translations in your dashboard first.');
   }
 
