@@ -278,7 +278,7 @@ export class InboxService {
   updateGlobalPreferences(
     preferences: ChannelPreference & {
       schedule?: {
-        isEnabled: boolean;
+        isEnabled?: boolean;
         weeklySchedule?: WeeklySchedule;
       };
     }
