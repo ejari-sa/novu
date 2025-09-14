@@ -47,9 +47,9 @@ export class MaqsamWhatsAppProvider extends BaseProvider implements IChatProvide
   ): Promise<ISendMessageSuccessResponse> {
     const payload = this.transform(bridgeProviderData, this.defineMessagePayload(options));
 
-    const { data } = await this.axiosClient.post<ISendMessageRes | ISendMessageFailureRes>(this.baseUrl, {
-      params: payload.body,
-    });
+    const { data } = await this.axiosClient.post<ISendMessageRes | ISendMessageFailureRes>(this.baseUrl, 
+      payload.body
+    );
 
     if ('conversationId' in data && data.conversationId) {
       return {
