@@ -46,6 +46,7 @@ export const ProvidersIdEnum = {
   FortySixElks: "forty-six-elks",
   Kannel: "kannel",
   Maqsam: "maqsam",
+  MaqsamWhatsApp: "maqsam-whatsapp",
   Termii: "termii",
   AfricasTalking: "africas-talking",
   NovuSms: "novu-sms",

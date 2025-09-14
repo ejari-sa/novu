@@ -49,6 +49,7 @@ export enum CredentialsKeyEnum {
   ApiVersion = 'apiVersion',
   AppSid = 'appSid',
   SenderId = 'senderId',
+  AccessSecret = 'accessSecret',
 }
 
 export type ConfigurationKey = keyof IConfigurations;
@@ -130,6 +131,7 @@ export enum ChatProviderIdEnum {
   WhatsAppBusiness = 'whatsapp-business',
   ChatWebhook = 'chat-webhook',
   Novu = 'novu-slack',
+  MaqsamWhatsApp = 'maqsam-whatsapp',
 }
 
 export enum PushProviderIdEnum {
