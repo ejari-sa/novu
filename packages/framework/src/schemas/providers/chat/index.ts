@@ -15,5 +15,4 @@ export const chatProviderSchemas = {
   slack: slackProviderSchemas,
   'whatsapp-business': genericProviderSchemas,
   zulip: genericProviderSchemas,
-  maqsam: genericProviderSchemas,
 } as const satisfies Record<ChatProviderIdEnum, { output: JsonSchema }>;

@@ -4,7 +4,6 @@ import {
   chatWebhookConfig,
   getstreamConfig,
   grafanaOnCallConfig,
-  maqsamChatConfig,
   rocketChatConfig,
   slackConfig,
   whatsAppBusinessConfig,
@@ -109,13 +108,4 @@ export const chatProviders: IProviderConfig[] = [
     logoFileName: { light: 'chat-webhook.svg', dark: 'chat-webhook.svg' },
     betaVersion: true,
   },
-  {
-    id: ChatProviderIdEnum.Maqsam,
-    displayName: 'Maqsam',
-    channel: ChannelTypeEnum.CHAT,
-    credentials: maqsamChatConfig,
-    docReference: 'https://portal.maqsam.com/docs/v2/whatsapp',
-    logoFileName: { light: 'maqsam.svg', dark: 'maqsam.svg' },
-    betaVersion: true,
-  }
 ];

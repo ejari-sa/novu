@@ -12,7 +12,6 @@ import { SlackHandler } from './handlers/slack.handler';
 import { WhatsAppBusinessHandler } from './handlers/whatsapp-business.handler';
 import { ZulipHandler } from './handlers/zulip.handler';
 import { IChatFactory, IChatHandler } from './interfaces';
-import { MaqsamChatHandler } from './handlers/maqsam.handler';
 
 export class ChatFactory implements IChatFactory {
   handlers: IChatHandler[] = [
@@ -28,7 +27,6 @@ export class ChatFactory implements IChatFactory {
     new GetstreamChatHandler(),
     new RocketChatHandler(),
     new WhatsAppBusinessHandler(),
-    new MaqsamChatHandler(),
   ];
 
   getHandler(integration: Pick<IntegrationEntity, 'credentials' | 'channel' | 'providerId' | 'configurations'>) {
