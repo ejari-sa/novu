@@ -41,11 +41,9 @@ test('should trigger maqsam library correctly with template message', async () =
 
   expect(mockPost).toHaveBeenCalled();
   expect(mockPost).toHaveBeenCalledWith('https://api.maqsam.com/v2/whatsapp/messages/send_message', {
-    params: {
-      RecipientPhone: options.phoneNumber,
-      TemplateId: options.customData?.templateId,
-      TemplateVariables: options.customData?.templateVariables,
-    },
+    RecipientPhone: options.phoneNumber,
+    TemplateId: options.customData?.templateId,
+    TemplateVariables: options.customData?.templateVariables,
   });
 
   const token = Buffer.from(`${mockProviderConfig.accessKey}:${mockProviderConfig.accessSecret}`).toString('base64');
@@ -94,14 +92,12 @@ test('should trigger maqsam library correctly with template message with _passth
 
   expect(mockPost).toHaveBeenCalled();
   expect(mockPost).toHaveBeenCalledWith('https://api.maqsam.com/v2/whatsapp/messages/send_message', {
-    params: {
       RecipientPhone: '+111111111',
       TemplateId: '123',
       TemplateVariables: {
         name: 'John',
         company: 'Acme',
       },
-    },
   });
 
   const token = Buffer.from(`${mockProviderConfig.accessKey}:${mockProviderConfig.accessSecret}`).toString('base64');
