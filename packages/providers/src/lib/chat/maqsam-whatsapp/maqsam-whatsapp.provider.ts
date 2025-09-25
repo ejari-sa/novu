@@ -3,6 +3,7 @@ import {
   IChatOptions,
   IChatProvider,
   ISendMessageSuccessResponse,
+  PhoneData,
 } from "@novu/stateless";
 import Axios, { AxiosInstance } from 'axios';
 import { BaseProvider, CasingEnum } from "../../../base.provider";
@@ -35,7 +36,7 @@ export class MaqsamWhatsAppProvider extends BaseProvider implements IChatProvide
 
   private defineMessagePayload(options: IChatOptions) {
     return {
-      RecipientPhone: options.phoneNumber,
+      RecipientPhone: (options.channelData as PhoneData).endpoint.phoneNumber,
       TemplateId: options.customData?.templateId,
       TemplateVariables: options.customData?.templateVariables,
     }

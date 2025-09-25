@@ -859,7 +859,7 @@ export const maqsamConfig: IConfigCredential[] = [
   ...smsConfigBase,
 ];
 
-export const maqsamChatConfig: IConfigCredential[] = [
+export const maqsamWhatsAppChatConfig: IConfigCredential[] = [
   {
     key: CredentialsKeyEnum.AccessKey,
     displayName: 'Access Key',
