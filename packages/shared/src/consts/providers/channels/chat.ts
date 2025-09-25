@@ -115,7 +115,7 @@ export const chatProviders: IProviderConfig[] = [
     channel: ChannelTypeEnum.CHAT,
     credentials: maqsamWhatsAppChatConfig,
     docReference: 'https://portal.maqsam.com/docs/v2/whatsapp',
-    logoFileName: { light: 'maqsam.svg', dark: 'maqsam.svg' },
+    logoFileName: { light: 'maqsam-whatsapp.svg', dark: 'maqsam-whatsapp.svg' },
     betaVersion: true,
   }
 ];
