@@ -1,5 +1,10 @@
 import { SmsProviderIdEnum } from '@novu/shared';
-import { ChannelTypeEnum, ISendMessageSuccessResponse, ISmsOptions, ISmsProvider } from '@novu/stateless';
+import {
+  ChannelTypeEnum,
+  ISendMessageSuccessResponse,
+  ISmsOptions,
+  ISmsProvider
+} from '@novu/stateless';
 import axios from 'axios';
 import qs from 'qs';
 import { BaseProvider, CasingEnum } from '../../../base.provider';
@@ -12,7 +17,7 @@ interface IUnifonicConfig {
 
 export class UnifonicSmsProvider extends BaseProvider implements ISmsProvider {
   id = SmsProviderIdEnum.Unifonic;
-  channelType = ChannelTypeEnum.SMS as ChannelTypeEnum.SMS;
+  channelType = ChannelTypeEnum.SMS as const;
   protected casing = CasingEnum.CAMEL_CASE;
 
   constructor(private config: IUnifonicConfig) {
@@ -38,9 +43,9 @@ export class UnifonicSmsProvider extends BaseProvider implements ISmsProvider {
       },
     });
 
-    if (response.data?.messageID) {
+    if (response.data?.success) {
       return {
-        id: response.data.messageID,
+        id: response.data.data.MessageID,
         date: new Date().toISOString(),
       };
     }
