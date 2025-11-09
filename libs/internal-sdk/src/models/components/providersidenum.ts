@@ -86,6 +86,7 @@ export const ProvidersIdEnum = {
   WhatsappBusiness: 'whatsapp-business',
   ChatWebhook: 'chat-webhook',
   NovuSlack: 'novu-slack',
+  MaqsamWhatsApp: 'maqsam-whatsapp',
 } as const;
 /**
  * Provider ID of the job
