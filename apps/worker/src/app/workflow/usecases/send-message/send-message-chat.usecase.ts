@@ -297,15 +297,23 @@ export class SendMessageChat extends SendMessageBase {
         Object.values(ChatProviderIdEnum).includes(chan.providerId as ChatProviderIdEnum)
       ) || [];
 
-    // Add WhatsApp Business if subscriber has phone
+    // Add WhatsApp APIs if subscriber has phone
     if (subscriber.phone) {
-      // @ts-expect-error - Adding WhatsApp channel without _integrationId
+      // @ts-expect-error - Adding WhatsApp Business channel without _integrationId
       chatChannels.push({
         providerId: ChatProviderIdEnum.WhatsAppBusiness,
         credentials: {
           phoneNumber: subscriber.phone,
         },
       });
+
+      // @ts-expect-error - Adding Maqsam WhatsApp channel without _integrationId
+      chatChannels.push({
+        providerId: ChatProviderIdEnum.MaqsamWhatsApp,
+        credentials: {
+          phoneNumber: subscriber.phone,
+        },
+      })
     }
 
     return chatChannels;
