@@ -69,6 +69,7 @@ const integrationSchema = new Schema<IntegrationDBModel>(
       AppIOSubscriptionId: Schema.Types.String,
       AppIOBearerToken: Schema.Types.String,
       AppIOOriginalSignature: Schema.Types.String,
+      accessSecret: Schema.Types.String,
     },
     configurations: {
       inboundWebhookEnabled: Schema.Types.Boolean,
