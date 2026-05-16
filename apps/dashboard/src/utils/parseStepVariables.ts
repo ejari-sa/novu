@@ -2,12 +2,17 @@ import { Completion } from '@codemirror/autocomplete';
 import type { JSONSchemaDefinition } from '@novu/shared';
 import { JSONSchema7 } from 'json-schema';
 import { isAllowedAlias } from '@/components/maily/repeat-block-aliases';
+import { SYSTEM_VARIABLE_DEFINITIONS } from '@/components/variables/system-variable-definitions';
 import {
   DIGEST_VARIABLES,
   DIGEST_VARIABLES_ENUM,
   getDynamicDigestVariable,
 } from '../components/variable/utils/digest-variables';
 import { isNamespaceOnlyVariable } from './liquid';
+
+function normalizeArrayNotation(path: string): string {
+  return path.replace(/\[(\d+)\]/g, '.$1');
+}
 
 export interface LiquidVariable {
   type?: 'variable' | 'digest' | 'new-variable' | 'local';
@@ -189,6 +194,11 @@ export function parseStepVariables(
       return false;
     }
 
+    // Built-in env system variables are always valid — injected at runtime, not in schema
+    if (SYSTEM_VARIABLE_DEFINITIONS.some(({ key }) => variable.name === key)) {
+      return true;
+    }
+
     if (isPayloadSchemaEnabled && variable.name.startsWith('payload.')) {
       return true;
     }
@@ -202,8 +212,9 @@ export function parseStepVariables(
 
     const pathWithFilters = variable.aliasFor || variable.name;
     const [path] = pathWithFilters.split('|');
+    const normalizedPath = normalizeArrayNotation(path);
 
-    if (result.primitives.some((primitive) => primitive.name === path)) {
+    if (result.primitives.some((primitive) => normalizeArrayNotation(primitive.name) === normalizedPath)) {
       return true;
     }
 

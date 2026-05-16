@@ -50,6 +50,7 @@ export function buildTopicsSubscriptionsListQuery(
       orderBy: request.orderBy,
       includeCursor: request.includeCursor,
       subscriberId: request.subscriberId,
+      contextKeys: request.contextKeys,
       idempotencyKey: request.idempotencyKey,
     }),
     queryFn: async function topicsSubscriptionsListQueryFn(
@@ -87,6 +88,7 @@ export function queryKeyTopicsSubscriptionsList(
     orderBy?: string | undefined;
     includeCursor?: boolean | undefined;
     subscriberId?: string | undefined;
+    contextKeys?: Array<string> | undefined;
     idempotencyKey?: string | undefined;
   },
 ): QueryKey {

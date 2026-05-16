@@ -6,7 +6,7 @@ import { StepTypeEnum } from '@/utils/enums';
 import { buildRoute, ROUTES } from '@/utils/routes';
 import { Step } from '@/utils/types';
 import { generateUUID } from '@/utils/uuid';
-import { NODE_HEIGHT } from './base-node';
+import { NODE_HEIGHT, NODE_WIDTH } from './base-node';
 import { AddNodeEdge, AddNodeEdgeType, DefaultEdge } from './edges';
 import {
   AddNode,
@@ -15,6 +15,7 @@ import {
   DelayNode,
   DigestNode,
   EmailNode,
+  HttpRequestNode,
   InAppNode,
   NodeData,
   PushNode,
@@ -24,6 +25,7 @@ import {
 } from './nodes';
 
 // y distance = node height + space between nodes
+const NODE_Y_OFFSET = 50;
 const Y_DISTANCE = NODE_HEIGHT + 50;
 
 export const nodeTypes = {
@@ -37,6 +39,7 @@ export const nodeTypes = {
   digest: DigestNode,
   throttle: ThrottleNode,
   custom: CustomNode,
+  http_request: HttpRequestNode,
   add: AddNode,
 };
 
@@ -51,6 +54,7 @@ export const NODE_TYPE_TO_STEP_TYPE: Omit<Record<keyof typeof nodeTypes, StepTyp
   digest: StepTypeEnum.DIGEST,
   throttle: StepTypeEnum.THROTTLE,
   custom: StepTypeEnum.CUSTOM,
+  http_request: StepTypeEnum.HTTP_REQUEST,
 };
 
 export const edgeTypes = {
@@ -61,8 +65,22 @@ export const edgeTypes = {
 export const mapStepToNodeContent = (
   stepType: StepTypeEnum,
   controlValues: Record<string, unknown>,
-  workflowOrigin: ResourceOriginEnum
+  workflowOrigin: ResourceOriginEnum,
+  stepResolverHash?: string
 ): string => {
+  if (stepResolverHash) {
+    switch (stepType) {
+      case StepTypeEnum.DELAY:
+        return 'Delay duration controlled by code';
+      case StepTypeEnum.DIGEST:
+        return 'Digest window controlled by code';
+      case StepTypeEnum.THROTTLE:
+        return 'Throttle rules controlled by code';
+      default:
+        break;
+    }
+  }
+
   switch (stepType) {
     case StepTypeEnum.TRIGGER:
       return 'This step triggers this workflow';
@@ -92,6 +110,8 @@ export const mapStepToNodeContent = (
       return 'Batches events into one coherent message before delivery to the subscriber.';
     case StepTypeEnum.THROTTLE:
       return 'Limits the number of workflow executions within a specified time window.';
+    case StepTypeEnum.HTTP_REQUEST:
+      return 'Send or receive data by calling an external API';
     case StepTypeEnum.CUSTOM:
       return 'Executes the business logic in your bridge application';
     default:
@@ -99,8 +119,12 @@ export const mapStepToNodeContent = (
   }
 };
 
-export const recalculatePositionAndIndex = (nodes: Node<NodeData, keyof typeof nodeTypes>[]) => {
-  const position = { x: 0, y: 0 };
+export const recalculatePositionAndIndex = (
+  nodes: Node<NodeData, keyof typeof nodeTypes>[],
+  containerWidth?: number
+) => {
+  const middleX = containerWidth ? containerWidth / 2 - NODE_WIDTH / 2 : 0;
+  const position = { x: middleX, y: NODE_Y_OFFSET };
 
   return nodes.map((node, index) => {
     const newNode = {
@@ -129,6 +153,7 @@ export const createNode = ({
   controlValues,
   isPending,
   type,
+  stepResolverHash,
 }: {
   x: number;
   y: number;
@@ -140,11 +165,13 @@ export const createNode = ({
   controlValues: Record<string, unknown>;
   isPending?: boolean;
   type: StepTypeEnum;
+  stepResolverHash?: string;
 }): Node<NodeData, keyof typeof nodeTypes> => {
   return {
-    // the random id is used to identify the node and to be able to re-render the nodes and edges
     id: generateUUID(),
     position: { x, y: y + Y_DISTANCE },
+    width: NODE_WIDTH,
+    height: NODE_HEIGHT,
     data: {
       name,
       content,
@@ -153,6 +180,7 @@ export const createNode = ({
       error,
       controlValues,
       isPending,
+      stepResolverHash,
     },
     type,
   };
@@ -169,7 +197,7 @@ export const mapStepToNode = ({
   step: Step;
   workflowOrigin?: ResourceOriginEnum;
 }): Node<NodeData, keyof typeof nodeTypes> => {
-  const content = mapStepToNodeContent(step.type, step.controls.values, workflowOrigin);
+  const content = mapStepToNodeContent(step.type, step.controls.values, workflowOrigin, step.stepResolverHash);
 
   const error = step.issues
     ? getFirstErrorMessage(step.issues, 'controls') || getFirstErrorMessage(step.issues, 'integration')
@@ -185,6 +213,7 @@ export const mapStepToNode = ({
     error: error?.message ?? '',
     controlValues: step.controls.values,
     type: step.type,
+    stepResolverHash: step.stepResolverHash,
   });
 };
 
@@ -220,15 +249,18 @@ export const createEdges = (nodes: Node<NodeData, keyof typeof nodeTypes>[], sho
   }, []);
 };
 
-export const createNodes = (
-  steps: Step[],
+export const createTriggerNode = (
   currentWorkflow?: WorkflowResponseDto,
-  currentEnvironment?: IEnvironment
+  currentEnvironment?: IEnvironment,
+  containerWidth?: number
 ) => {
+  const middleX = containerWidth ? containerWidth / 2 - NODE_WIDTH / 2 : 0;
   const id = generateUUID();
   const triggerNode: Node<NodeData, 'trigger'> = {
     id,
-    position: { x: 0, y: 0 },
+    position: { x: middleX, y: 50 },
+    width: NODE_WIDTH,
+    height: NODE_HEIGHT,
     data: {
       index: 0,
       triggerLink: buildRoute(ROUTES.TRIGGER_WORKFLOW, {
@@ -238,6 +270,34 @@ export const createNodes = (
     },
     type: 'trigger',
   };
+  return triggerNode;
+};
+
+export const createAddNode = (
+  previousPosition: { x: number; y: number },
+  allNodes: Node<NodeData, keyof typeof nodeTypes>[]
+) => {
+  const addNodeId = generateUUID();
+  const addNode: Node<NodeData, 'add'> = {
+    id: addNodeId,
+    position: { ...previousPosition, y: previousPosition.y + Y_DISTANCE },
+    width: NODE_WIDTH,
+    height: NODE_HEIGHT,
+    data: {
+      index: allNodes.length,
+    },
+    type: 'add',
+  };
+  return addNode;
+};
+
+const createNodes = (
+  steps: Step[],
+  currentWorkflow?: WorkflowResponseDto,
+  currentEnvironment?: IEnvironment,
+  containerWidth?: number
+) => {
+  const triggerNode = createTriggerNode(currentWorkflow, currentEnvironment, containerWidth);
   let previousPosition = triggerNode.position;
 
   const createdNodes = steps?.map((step, index) => {
@@ -253,26 +313,19 @@ export const createNodes = (
 
   const allNodes: Node<NodeData, keyof typeof nodeTypes>[] = [triggerNode, ...createdNodes];
 
-  const addNodeId = generateUUID();
-  const addNode: Node<NodeData, 'add'> = {
-    id: addNodeId,
-    position: { ...previousPosition, y: previousPosition.y + Y_DISTANCE },
-    data: {
-      index: allNodes.length,
-    },
-    type: 'add',
-  };
+  const addNode = createAddNode(previousPosition, allNodes);
 
   return [...allNodes, addNode];
 };
 
-export const generateNodesAndEdges = (
+const generateNodesAndEdges = (
   steps: Step[],
   showStepPreview?: boolean,
   currentWorkflow?: WorkflowResponseDto,
-  currentEnvironment?: IEnvironment
+  currentEnvironment?: IEnvironment,
+  containerWidth?: number
 ): { nodes: Node<NodeData, keyof typeof nodeTypes>[]; edges: AddNodeEdgeType[] } => {
-  const nodes = createNodes(steps, currentWorkflow, currentEnvironment);
+  const nodes = createNodes(steps, currentWorkflow, currentEnvironment, containerWidth);
 
   return {
     nodes,

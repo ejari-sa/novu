@@ -11,16 +11,11 @@ import {
   ButtonTypeEnum$inboundSchema,
 } from "./buttontypeenum.js";
 
-/**
- * Payload of the action result
- */
-export type MessageActionResultPayload = {};
-
 export type MessageActionResult = {
   /**
    * Payload of the action result
    */
-  payload?: MessageActionResultPayload | undefined;
+  payload?: { [k: string]: any } | undefined;
   /**
    * Type of button for the action result
    */
@@ -28,29 +23,12 @@ export type MessageActionResult = {
 };
 
 /** @internal */
-export const MessageActionResultPayload$inboundSchema: z.ZodType<
-  MessageActionResultPayload,
-  z.ZodTypeDef,
-  unknown
-> = z.object({});
-
-export function messageActionResultPayloadFromJSON(
-  jsonString: string,
-): SafeParseResult<MessageActionResultPayload, SDKValidationError> {
-  return safeParse(
-    jsonString,
-    (x) => MessageActionResultPayload$inboundSchema.parse(JSON.parse(x)),
-    `Failed to parse 'MessageActionResultPayload' from JSON`,
-  );
-}
-
-/** @internal */
 export const MessageActionResult$inboundSchema: z.ZodType<
   MessageActionResult,
   z.ZodTypeDef,
   unknown
 > = z.object({
-  payload: z.lazy(() => MessageActionResultPayload$inboundSchema).optional(),
+  payload: z.record(z.any()).optional(),
   type: ButtonTypeEnum$inboundSchema.optional(),
 });
 

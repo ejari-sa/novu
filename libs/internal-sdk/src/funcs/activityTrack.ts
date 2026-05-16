@@ -27,7 +27,7 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * Track activity and engagement events
+ * Track provider activity and engagement events
  *
  * @remarks
  * Track activity and engagement events for a specific delivery provider
@@ -99,7 +99,6 @@ async function $do(
       charEncoding: "percent",
     }),
   };
-
   const path = pathToFunc(
     "/v2/inbound-webhooks/delivery-providers/{environmentId}/{integrationId}",
   )(pathParams);

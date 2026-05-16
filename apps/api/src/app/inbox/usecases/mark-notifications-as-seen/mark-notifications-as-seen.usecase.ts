@@ -1,7 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import {
   AnalyticsService,
-  buildFeedKey,
   buildMessageCountKey,
   InvalidateCacheService,
   LogRepository,
@@ -15,7 +14,13 @@ import {
   WebSocketsQueueService,
 } from '@novu/application-generic';
 import { EnvironmentEntity, EnvironmentRepository, MessageEntity, MessageRepository } from '@novu/dal';
-import { DeliveryLifecycleStatusEnum, WebhookEventEnum, WebhookObjectTypeEnum, WebSocketEventEnum } from '@novu/shared';
+import {
+  DeliveryLifecycleStatusEnum,
+  normalizeTagGroups,
+  WebhookEventEnum,
+  WebhookObjectTypeEnum,
+  WebSocketEventEnum,
+} from '@novu/shared';
 
 import { GetSubscriber } from '../../../subscribers/usecases/get-subscriber';
 import { AnalyticsEventsEnum } from '../../utils';
@@ -114,7 +119,7 @@ export class MarkNotificationsAsSeen {
 
       const fromFilters: Record<string, unknown> = {};
       if (tags) {
-        fromFilters.tags = tags;
+        fromFilters.tagGroups = normalizeTagGroups(tags);
       }
       if (parsedData) {
         fromFilters.data = parsedData;
@@ -160,7 +165,7 @@ export class MarkNotificationsAsSeen {
         event: WebSocketEventEnum.UNSEEN,
         userId: subscriber._id,
         _environmentId: command.environmentId,
-        ...(contextKeys && { contextKeys }),
+        contextKeys: contextKeys ?? [],
       },
       groupId: subscriber._organizationId,
     });
@@ -262,14 +267,14 @@ export class MarkNotificationsAsSeen {
       event_type: 'message_seen',
       title: mapEventTypeToTitle('message_seen'),
       message: `Message seen for subscriber ${message._subscriberId}`,
-      raw_data: null,
+      raw_data: '',
       status: 'success',
-      entity_type: 'step_run',
       entity_id: message._jobId,
       step_run_type: message.channel as StepType,
       workflow_run_identifier: '',
       _notificationId: message._notificationId,
       workflow_id: message._templateId,
+      provider_id: '',
     };
   }
 }

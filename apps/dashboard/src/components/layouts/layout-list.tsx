@@ -6,6 +6,10 @@ import {
   LayoutsUrlState,
   useLayoutsUrlState,
 } from '@/components/layouts/hooks/use-layouts-url-state';
+import { usePersistedPageSize } from '@/hooks/use-persisted-page-size';
+
+const LAYOUTS_TABLE_ID = 'layouts-list';
+
 import { LayoutListBlank } from '@/components/layouts/layout-list-blank';
 import { LayoutRow, LayoutRowSkeleton } from '@/components/layouts/layout-row';
 import { LayoutsFilters } from '@/components/layouts/layouts-filters';
@@ -20,6 +24,7 @@ import {
   TableRow,
 } from '@/components/primitives/table';
 import { TablePaginationFooter } from '@/components/primitives/table-pagination-footer';
+import { IS_SELF_HOSTED } from '@/config';
 import { useFetchLayouts } from '@/hooks/use-fetch-layouts';
 import { useFetchSubscription } from '@/hooks/use-fetch-subscription';
 import { cn } from '@/utils/ui';
@@ -126,6 +131,10 @@ type LayoutListProps = HTMLAttributes<HTMLDivElement>;
 
 export const LayoutList = (props: LayoutListProps) => {
   const { filterValues, handleFiltersChange, toggleSort, resetFilters } = useLayoutsUrlState();
+  const { setPageSize: setPersistedPageSize } = usePersistedPageSize({
+    tableId: LAYOUTS_TABLE_ID,
+    defaultPageSize: 10,
+  });
   const areFiltersApplied = (Object.keys(filterValues) as (keyof LayoutsFilter)[]).some(
     (key) => ['query'].includes(key) && filterValues[key] !== ''
   );
@@ -155,9 +164,10 @@ export const LayoutList = (props: LayoutListProps) => {
   };
 
   const handlePageSizeChange = (newPageSize: number) => {
+    setPersistedPageSize(newPageSize);
     handleFiltersChange({
       limit: newPageSize,
-      offset: 0, // Reset to first page when changing page size
+      offset: 0,
     });
   };
 
@@ -183,7 +193,7 @@ export const LayoutList = (props: LayoutListProps) => {
     );
   }
 
-  if (tier === ApiServiceLevelEnum.FREE && data?.layouts.length === 1) {
+  if (!IS_SELF_HOSTED && tier === ApiServiceLevelEnum.FREE && data?.layouts.length === 1) {
     return <LayoutsListUpgradeCta />;
   }
 

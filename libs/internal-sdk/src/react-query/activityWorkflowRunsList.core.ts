@@ -52,6 +52,7 @@ export function buildActivityWorkflowRunsListQuery(
       statuses: request.statuses,
       channels: request.channels,
       topicKey: request.topicKey,
+      subscriptionId: request.subscriptionId,
       createdGte: request.createdGte,
       createdLte: request.createdLte,
       severity: request.severity,
@@ -91,9 +92,10 @@ export function queryKeyActivityWorkflowRunsList(
     statuses?: Array<operations.QueryParamStatuses> | undefined;
     channels?: Array<string> | undefined;
     topicKey?: string | undefined;
+    subscriptionId?: string | undefined;
     createdGte?: string | undefined;
     createdLte?: string | undefined;
-    severity?: Array<operations.Severity> | undefined;
+    severity?: Array<operations.QueryParamSeverity> | undefined;
     contextKeys?: Array<string> | undefined;
     idempotencyKey?: string | undefined;
   },

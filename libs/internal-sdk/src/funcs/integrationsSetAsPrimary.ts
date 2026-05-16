@@ -32,6 +32,8 @@ import { Result } from "../types/fp.js";
  * Update an integration as **primary** by its unique key identifier **integrationId**.
  *     This API will set the integration as primary for that channel in the current environment.
  *     Primary integration is used to deliver notification for sms and email channels in the workflow.
+ *
+ * This operation requires either {@link Security.bearerAuth} or {@link Security.secretKey} to be set on the `security` parameter when initializing the SDK.
  */
 export function integrationsSetAsPrimary(
   client: NovuCore,
@@ -110,7 +112,6 @@ async function $do(
       charEncoding: "percent",
     }),
   };
-
   const path = pathToFunc("/v1/integrations/{integrationId}/set-primary")(
     pathParams,
   );
@@ -125,7 +126,7 @@ async function $do(
   }));
 
   const securityInput = await extractSecurity(client._options.security);
-  const requestSecurity = resolveGlobalSecurity(securityInput);
+  const requestSecurity = resolveGlobalSecurity(securityInput, [1, 0]);
 
   const context = {
     options: client._options,

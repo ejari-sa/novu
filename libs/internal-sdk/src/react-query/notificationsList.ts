@@ -11,6 +11,17 @@ import {
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
 import * as components from "../models/components/index.js";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { NovuError } from "../models/errors/novuerror.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useNovuContext } from "./_context.js";
 import {
@@ -31,6 +42,18 @@ export {
   queryKeyNotificationsList,
 };
 
+export type NotificationsListQueryError =
+  | errors.ErrorDto
+  | errors.ValidationErrorDto
+  | NovuError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * List all events
  *
@@ -42,8 +65,11 @@ export {
  */
 export function useNotificationsList(
   request: operations.NotificationsControllerListNotificationsRequest,
-  options?: QueryHookOptions<NotificationsListQueryData>,
-): UseQueryResult<NotificationsListQueryData, Error> {
+  options?: QueryHookOptions<
+    NotificationsListQueryData,
+    NotificationsListQueryError
+  >,
+): UseQueryResult<NotificationsListQueryData, NotificationsListQueryError> {
   const client = useNovuContext();
   return useQuery({
     ...buildNotificationsListQuery(
@@ -66,8 +92,14 @@ export function useNotificationsList(
  */
 export function useNotificationsListSuspense(
   request: operations.NotificationsControllerListNotificationsRequest,
-  options?: SuspenseQueryHookOptions<NotificationsListQueryData>,
-): UseSuspenseQueryResult<NotificationsListQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    NotificationsListQueryData,
+    NotificationsListQueryError
+  >,
+): UseSuspenseQueryResult<
+  NotificationsListQueryData,
+  NotificationsListQueryError
+> {
   const client = useNovuContext();
   return useSuspenseQuery({
     ...buildNotificationsListQuery(
@@ -93,6 +125,7 @@ export function setNotificationsListData(
       limit?: number | undefined;
       transactionId?: string | undefined;
       topicKey?: string | undefined;
+      subscriptionId?: string | undefined;
       contextKeys?: Array<string> | undefined;
       after?: string | undefined;
       before?: string | undefined;
@@ -120,6 +153,7 @@ export function invalidateNotificationsList(
       limit?: number | undefined;
       transactionId?: string | undefined;
       topicKey?: string | undefined;
+      subscriptionId?: string | undefined;
       contextKeys?: Array<string> | undefined;
       after?: string | undefined;
       before?: string | undefined;

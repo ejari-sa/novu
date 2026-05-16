@@ -1,15 +1,8 @@
 import { EnvironmentEnum, EnvironmentTypeEnum, PermissionsEnum, ResourceOriginEnum } from '@novu/shared';
-import {
-  Background,
-  BackgroundVariant,
-  ReactFlow,
-  ReactFlowProvider,
-  useReactFlow,
-  ViewportHelperFunctionOptions,
-} from '@xyflow/react';
+import { Background, BackgroundVariant, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useUser } from '@clerk/clerk-react';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { InlineToast } from '@/components/primitives/inline-toast';
 import { useWorkflow } from '@/components/workflow-editor/workflow-provider';
@@ -17,7 +10,6 @@ import { useEnvironment } from '@/context/environment/hooks';
 import { useHasPermission } from '@/hooks/use-has-permission';
 import { buildRoute, ROUTES } from '@/utils/routes';
 import { Step } from '@/utils/types';
-import { NODE_WIDTH } from './base-node';
 import { CanvasContext } from './drag-context';
 import { edgeTypes, nodeTypes } from './node-utils';
 import { useCanvasNodesEdges } from './use-canvas-nodes-edges';
@@ -40,14 +32,14 @@ const WorkflowCanvasChild = ({
   const { workflow } = useWorkflow();
   const navigate = useNavigate();
   const { user } = useUser();
+
   const {
     nodes,
     edges,
     draggedNodeId,
     intersectingNodeId,
     intersectingEdgeId,
-    removeEdges,
-    updateEdges,
+    animatingNodeIds,
     selectNode,
     selectedNodeId,
     unselectNode,
@@ -60,44 +52,47 @@ const WorkflowCanvasChild = ({
   } = useCanvasNodesEdges({
     steps,
     reactFlowInstance,
+    reactFlowWrapper,
   });
 
-  const positionCanvas = useCallback(
-    (options?: ViewportHelperFunctionOptions) => {
-      const clientWidth = reactFlowWrapper.current?.clientWidth;
-      const middle = clientWidth ? clientWidth / 2 - NODE_WIDTH / 2 : 0;
-
-      reactFlowInstance.setViewport({ x: middle, y: 50, zoom: 0.99 }, options);
-    },
-    [reactFlowInstance]
-  );
-
   useEffect(() => {
-    const listener = () => positionCanvas({ duration: 300 });
+    const element = reactFlowWrapper.current;
+    if (!element) return;
 
-    window.addEventListener('resize', listener);
+    let previousWidth = element.clientWidth;
 
-    return () => {
-      window.removeEventListener('resize', listener);
-    };
-  }, [positionCanvas]);
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const newWidth = entry.contentRect.width;
+        if (newWidth === previousWidth) continue;
 
-  useLayoutEffect(() => {
-    positionCanvas();
-  }, [positionCanvas]);
+        const difference = newWidth - previousWidth;
+        const { x, y, zoom } = reactFlowInstance.getViewport();
+        reactFlowInstance.setViewport({ x: x + difference / 2, y, zoom });
+
+        previousWidth = newWidth;
+      }
+    });
+
+    observer.observe(element);
+
+    return () => observer.disconnect();
+  }, [reactFlowInstance]);
+
+  const isCodeFirstWorkflow = workflow?.origin === ResourceOriginEnum.EXTERNAL;
 
   const dragContextValue = useMemo(() => {
     return {
       isReadOnly,
       showStepPreview,
+      isCodeFirstWorkflow,
       onNodeDragStart,
       onNodeDragMove,
       onNodeDragEnd,
       draggedNodeId,
       intersectingNodeId,
       intersectingEdgeId,
-      updateEdges,
-      removeEdges,
+      animatingNodeIds,
       copyNode,
       addNode,
       removeNode,
@@ -108,14 +103,14 @@ const WorkflowCanvasChild = ({
   }, [
     isReadOnly,
     showStepPreview,
+    isCodeFirstWorkflow,
     onNodeDragStart,
     onNodeDragMove,
     onNodeDragEnd,
     draggedNodeId,
     intersectingNodeId,
     intersectingEdgeId,
-    removeEdges,
-    updateEdges,
+    animatingNodeIds,
     copyNode,
     addNode,
     removeNode,
@@ -227,7 +222,7 @@ export const WorkflowCanvas = ({
                 transition: 'border 0.3s ease-in-out, background 0.3s ease-in-out',
               }}
             />
-            <div className="absolute left-4 top-4 z-50">
+            <div className="absolute left-4 top-4 z-50 rounded-lg bg-white">
               <InlineToast
                 className="bg-warning/10 border shadow-md"
                 variant={'warning'}

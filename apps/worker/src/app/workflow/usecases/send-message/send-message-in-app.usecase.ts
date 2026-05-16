@@ -1,7 +1,6 @@
-import { Injectable, Optional } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
 import {
-  buildFeedKey,
   buildMessageCountKey,
   CompileInAppTemplate,
   CompileInAppTemplateCommand,
@@ -225,12 +224,13 @@ export class SendMessageInApp extends SendMessageBase {
         _templateId: command._templateId,
         _messageTemplateId: step.template._id,
         templateIdentifier: command.identifier,
+        stepId: command.step.stepId,
         transactionId: command.transactionId,
         providerId: integration.providerId,
         _feedId: step.template._feedId,
         channel: ChannelTypeEnum.IN_APP,
         _jobId: command.jobId,
-        ...(command.contextKeys && { contextKeys: command.contextKeys }),
+        contextKeys: command.contextKeys,
         ...(actor &&
           actor.type !== ActorTypeEnum.NONE && {
             actor,

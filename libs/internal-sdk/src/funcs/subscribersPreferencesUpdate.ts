@@ -33,6 +33,8 @@ import { Result } from "../types/fp.js";
  * Update subscriber preferences by its unique key identifier **subscriberId**.
  *     **workflowId** is optional field, if provided, this API will update that workflow preference,
  *     otherwise it will update global preferences
+ *
+ * This operation requires either {@link Security.bearerAuth} or {@link Security.secretKey} to be set on the `security` parameter when initializing the SDK.
  */
 export function subscribersPreferencesUpdate(
   client: NovuCore,
@@ -117,7 +119,6 @@ async function $do(
       charEncoding: "percent",
     }),
   };
-
   const path = pathToFunc("/v2/subscribers/{subscriberId}/preferences")(
     pathParams,
   );
@@ -133,7 +134,7 @@ async function $do(
   }));
 
   const securityInput = await extractSecurity(client._options.security);
-  const requestSecurity = resolveGlobalSecurity(securityInput);
+  const requestSecurity = resolveGlobalSecurity(securityInput, [1, 0]);
 
   const context = {
     options: client._options,

@@ -1,30 +1,22 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { TopicEntity, TopicRepository, TopicSubscribersRepository } from '@novu/dal';
 import {
-  PreferencesRepository,
-  TopicEntity,
-  TopicPreferencesSummary,
-  TopicRepository,
-  TopicSubscribersRepository,
-  TopicWithPreferences,
-} from '@novu/dal';
-import {
+  FeatureFlagsKeysEnum,
   ISubscribersDefine,
   ITopic,
-  PreferencesTypeEnum,
   SubscriberSourceEnum,
   TriggerRecipient,
   TriggerRecipientSubscriber,
   TriggerRecipientsTypeEnum,
-  WorkflowPreferencesPartial,
 } from '@novu/shared';
-import type { RulesLogic } from 'json-logic-js';
-import jsonLogic from 'json-logic-js';
 
 import { PinoLogger } from 'nestjs-pino';
+import { SubscriberTopicPreference } from '../../dtos';
 import { InstrumentUsecase } from '../../instrumentation';
 import { CacheService, FeatureFlagsService } from '../../services';
-import type { EventType, Trace } from '../../services/analytic-logs';
+import type { EventType } from '../../services/analytic-logs';
 import { LogRepository, mapEventTypeToTitle, TraceLogRepository } from '../../services/analytic-logs';
+import { RequestTraceInput } from '../../services/analytic-logs/trace-log';
 import { SubscriberProcessQueueService } from '../../services/queues/subscriber-process-queue.service';
 import { TriggerBase } from '../trigger-base';
 import { TriggerMulticastCommand } from './trigger-multicast.command';
@@ -41,13 +33,12 @@ export class TriggerMulticast extends TriggerBase {
     subscriberProcessQueueService: SubscriberProcessQueueService,
     private topicSubscribersRepository: TopicSubscribersRepository,
     private topicRepository: TopicRepository,
-    private preferencesRepository: PreferencesRepository,
     protected cacheService: CacheService,
     protected featureFlagsService: FeatureFlagsService,
     protected logger: PinoLogger,
     private traceLogRepository: TraceLogRepository
   ) {
-    super(subscriberProcessQueueService, cacheService, featureFlagsService, logger, QUEUE_CHUNK_SIZE);
+    super(subscriberProcessQueueService, cacheService, logger, QUEUE_CHUNK_SIZE);
     this.logger.setContext(this.constructor.name);
   }
 
@@ -76,8 +67,16 @@ export class TriggerMulticast extends TriggerBase {
       const allTopicExcludedSubscribers = Array.from(
         new Set([...Array.from(topicExclusions.values()).flatMap((set) => Array.from(set))])
       );
-      let totalSubscriptionsEvaluated = 0;
-      let totalSubscriptionsFiltered = 0;
+
+      // Check feature flag and resolve contextKeys
+      const useContextFiltering = await this.featureFlagsService.getFlag({
+        key: FeatureFlagsKeysEnum.IS_CONTEXT_PREFERENCES_ENABLED,
+        defaultValue: false,
+        organization: { _id: organizationId },
+      });
+
+      // Only pass contextKeys if feature flag is enabled
+      const contextKeysForQuery = useContextFiltering ? command.contextKeys : undefined;
 
       const getTopicDistinctSubscribersGenerator = this.topicSubscribersRepository.getTopicDistinctSubscribers({
         query: {
@@ -85,6 +84,7 @@ export class TriggerMulticast extends TriggerBase {
           _environmentId: environmentId,
           topicIds,
           excludeSubscribers: [...singleSubscriberIds, ...allTopicExcludedSubscribers],
+          contextKeys: contextKeysForQuery,
         },
         batchSize: SUBSCRIBER_TOPIC_DISTINCT_BATCH_SIZE,
       });
@@ -93,7 +93,7 @@ export class TriggerMulticast extends TriggerBase {
         string,
         {
           subscriberId: string;
-          topics: Array<TopicWithPreferences>;
+          topics: Array<SubscriberTopicPreference>;
         }
       >();
 
@@ -107,20 +107,6 @@ export class TriggerMulticast extends TriggerBase {
           continue;
         }
 
-        totalSubscriptionsEvaluated++;
-
-        const evaluationResult = await this.evaluateSubscriptionPreferences(
-          command,
-          externalSubscriberId,
-          internalSubscriptionId,
-          subscriptionId
-        );
-
-        if (!evaluationResult.result) {
-          totalSubscriptionsFiltered++;
-          continue;
-        }
-
         const topic = topics.find((t) => t._id === topicId);
         if (!topic) {
           continue;
@@ -128,11 +114,12 @@ export class TriggerMulticast extends TriggerBase {
 
         const existingSubscriber = subscribersMap.get(externalSubscriberId);
         if (existingSubscriber) {
-          if (!existingSubscriber.topics.some((t) => t._topicId === topic._id)) {
+          if (!existingSubscriber.topics.some((t) => t.subscriptionIdentifier === subscriptionId)) {
             existingSubscriber.topics.push({
               _topicId: topic._id,
               topicKey: topic.key,
-              preferenceEvaluation: evaluationResult,
+              _topicSubscriptionId: internalSubscriptionId,
+              subscriptionIdentifier: subscriptionId,
             });
           }
         } else {
@@ -142,7 +129,8 @@ export class TriggerMulticast extends TriggerBase {
               {
                 _topicId: topic._id,
                 topicKey: topic.key,
-                preferenceEvaluation: evaluationResult,
+                _topicSubscriptionId: internalSubscriptionId,
+                subscriptionIdentifier: subscriptionId,
               },
             ],
           });
@@ -175,8 +163,6 @@ export class TriggerMulticast extends TriggerBase {
           singleSubscribers: subscribersToProcess.length,
           topicSubscribers: totalProcessed - subscribersToProcess.length,
           topicsUsed: topics.length,
-          subscriptionsEvaluated: totalSubscriptionsEvaluated,
-          subscriptionsFiltered: totalSubscriptionsFiltered,
         }
       );
     } catch (e) {
@@ -194,112 +180,22 @@ export class TriggerMulticast extends TriggerBase {
         }
       );
 
-      this.logger.error(
-        {
-          transactionId: command.transactionId,
-          organization: command.organizationId,
-          triggerIdentifier: command.identifier,
-          userId: command.userId,
-          error: e,
-        },
-        'Unexpected error has occurred when processing multicast'
-      );
+      const logData = {
+        transactionId: command.transactionId,
+        organization: command.organizationId,
+        triggerIdentifier: command.identifier,
+        userId: command.userId,
+        error: e,
+      };
+
+      if (isSubscriberIdValidationError(e)) {
+        this.logger.debug(logData, error.message);
+      } else {
+        this.logger.error(logData, 'Unexpected error has occurred when processing multicast');
+      }
 
       throw e;
     }
-  }
-
-  private async evaluateSubscriptionPreferences(
-    command: TriggerMulticastCommand,
-    externalSubscriberId: string,
-    internalSubscriptionId: string,
-    subscriptionIdentifier: string
-  ): Promise<TopicPreferencesSummary> {
-    try {
-      const subscriptionPreference = await this.preferencesRepository.findOne({
-        _environmentId: command.environmentId,
-        _organizationId: command.organizationId,
-        _templateId: command.template._id,
-        _topicSubscriptionId: internalSubscriptionId,
-        type: PreferencesTypeEnum.SUBSCRIPTION_SUBSCRIBER_WORKFLOW,
-      });
-
-      if (subscriptionPreference) {
-        const passes = await this.evaluatePreferenceCondition(subscriptionPreference.preferences, command.payload);
-        const condition = subscriptionPreference.preferences.all?.condition;
-
-        if (!passes) {
-          return {
-            result: false,
-            subscriptionIdentifier,
-            condition: condition !== undefined && condition !== null ? condition : undefined,
-          };
-        }
-
-        return {
-          result: true,
-          subscriptionIdentifier,
-          condition: condition !== undefined && condition !== null ? condition : undefined,
-        };
-      }
-
-      return { result: true, subscriptionIdentifier };
-    } catch (error) {
-      this.logger.error(
-        {
-          error,
-          externalSubscriberId,
-          workflowId: command.template._id,
-          transactionId: command.transactionId,
-        },
-        'Error evaluating subscription preferences, allowing subscription to pass through'
-      );
-
-      return { result: true, subscriptionIdentifier };
-    }
-  }
-
-  private async evaluatePreferenceCondition(
-    preferences: WorkflowPreferencesPartial,
-    payload: Record<string, unknown>
-  ): Promise<boolean> {
-    const condition = preferences.all?.condition;
-
-    if (condition !== undefined && condition !== null) {
-      try {
-        const result = jsonLogic.apply(condition as RulesLogic, { payload });
-
-        if (typeof result !== 'boolean') {
-          this.logger.warn(
-            {
-              condition,
-              result,
-            },
-            'Preference condition evaluation did not return a boolean, treating as false'
-          );
-          return false;
-        }
-
-        return result;
-      } catch (error) {
-        this.logger.error(
-          {
-            error,
-            condition,
-          },
-          'Error evaluating preference condition, treating as false'
-        );
-        return false;
-      }
-    }
-
-    const enabled = preferences.all?.enabled;
-
-    if (enabled === undefined || enabled === null) {
-      return true;
-    }
-
-    return enabled;
   }
 
   private async createMulticastTrace(
@@ -314,7 +210,7 @@ export class TriggerMulticast extends TriggerBase {
     }
 
     try {
-      const traceData: Omit<Trace, 'id' | 'expires_at'> = {
+      const traceData: RequestTraceInput = {
         created_at: LogRepository.formatDateTime64(new Date()),
         organization_id: command.organizationId,
         environment_id: command.environmentId,
@@ -326,10 +222,10 @@ export class TriggerMulticast extends TriggerBase {
         message: message || null,
         raw_data: rawData ? JSON.stringify(rawData) : null,
         status,
-        entity_type: 'request',
         entity_id: command.requestId,
         workflow_run_identifier: command.template.triggers[0].identifier,
         workflow_id: command.template._id,
+        provider_id: '',
       };
 
       await this.traceLogRepository.createRequest([traceData]);
@@ -433,6 +329,16 @@ export const buildSubscriberDefine = (recipient: TriggerRecipientSubscriber): IS
     return recipient;
   }
 };
+
+const SUBSCRIBER_ID_VALIDATION_PREFIX = 'subscriberId under property to';
+
+function isSubscriberIdValidationError(e: unknown): boolean {
+  return (
+    e instanceof BadRequestException &&
+    typeof e.message === 'string' &&
+    e.message.startsWith(SUBSCRIBER_ID_VALIDATION_PREFIX)
+  );
+}
 
 export const validateSubscriberDefine = (recipient: ISubscribersDefine) => {
   if (!recipient) {

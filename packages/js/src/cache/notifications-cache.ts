@@ -15,7 +15,7 @@ import type {
   UnreadArgs,
   UnsnoozeArgs,
 } from '../notifications';
-import type { InboxNotification, NotificationFilter } from '../types';
+import type { InboxNotification, NotificationFilter, TagsFilter } from '../types';
 import { createNotification } from '../ui/internal/createNotification';
 import { areDataEqual, areTagsEqual, isSameFilter } from '../utils/notification-utils';
 import { InMemoryCache } from './in-memory-cache';
@@ -32,8 +32,10 @@ const excludeEmpty = ({
   limit,
   offset,
   after,
+  createdGte,
+  createdLte,
 }: ListNotificationsArgs) =>
-  Object.entries({ tags, data, read, archived, snoozed, seen, severity, limit, offset, after })
+  Object.entries({ tags, data, read, archived, snoozed, seen, severity, limit, offset, after, createdGte, createdLte })
     .filter(([_, value]) => value !== null && value !== undefined && !(Array.isArray(value) && value.length === 0))
     .reduce((acc, [key, value]) => {
       // @ts-expect-error
@@ -53,8 +55,12 @@ const getCacheKey = ({
   limit,
   offset,
   after,
+  createdGte,
+  createdLte,
 }: ListNotificationsArgs): string => {
-  return JSON.stringify(excludeEmpty({ tags, data, read, archived, snoozed, seen, severity, limit, offset, after }));
+  return JSON.stringify(
+    excludeEmpty({ tags, data, read, archived, snoozed, seen, severity, limit, offset, after, createdGte, createdLte })
+  );
 };
 
 const getFilterKey = ({
@@ -65,8 +71,13 @@ const getFilterKey = ({
   snoozed,
   seen,
   severity,
-}: Pick<ListNotificationsArgs, 'tags' | 'data' | 'read' | 'archived' | 'snoozed' | 'seen' | 'severity'>): string => {
-  return JSON.stringify(excludeEmpty({ tags, data, read, archived, snoozed, seen, severity }));
+  createdGte,
+  createdLte,
+}: Pick<
+  ListNotificationsArgs,
+  'tags' | 'data' | 'read' | 'archived' | 'snoozed' | 'seen' | 'severity' | 'createdGte' | 'createdLte'
+>): string => {
+  return JSON.stringify(excludeEmpty({ tags, data, read, archived, snoozed, seen, severity, createdGte, createdLte }));
 };
 
 const getFilter = (key: string): NotificationFilter => {
@@ -111,7 +122,7 @@ type NotificationEventArgs =
   | UnsnoozeArgs
   | CompleteArgs
   | RevertArgs
-  | { tags?: string[]; data?: Record<string, unknown> } // for bulk operations
+  | { tags?: TagsFilter; data?: Record<string, unknown> } // for bulk operations
   | { notificationIds: string[] } // for seen_all operations
   | Record<string, never>; // for empty args
 
@@ -314,6 +325,8 @@ export class NotificationsCache {
         archived: args.archived,
         seen: args.seen,
         severity: args.severity,
+        createdGte: args.createdGte,
+        createdLte: args.createdLte,
       });
     }
   }

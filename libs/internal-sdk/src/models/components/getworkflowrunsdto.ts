@@ -8,6 +8,10 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
+  TopicResponseDto,
+  TopicResponseDto$inboundSchema,
+} from "./topicresponsedto.js";
+import {
   WorkflowRunStepsDetailsDto,
   WorkflowRunStepsDetailsDto$inboundSchema,
 } from "./workflowrunstepsdetailsdto.js";
@@ -127,6 +131,10 @@ export type GetWorkflowRunsDto = {
    */
   contextKeys?: Array<string> | undefined;
   /**
+   * Topics
+   */
+  topics?: Array<TopicResponseDto> | undefined;
+  /**
    * Workflow run steps
    */
   steps: Array<WorkflowRunStepsDetailsDto>;
@@ -168,6 +176,7 @@ export const GetWorkflowRunsDto$inboundSchema: z.ZodType<
   severity: Severity$inboundSchema,
   critical: z.boolean(),
   contextKeys: z.array(z.string()).optional(),
+  topics: z.array(TopicResponseDto$inboundSchema).optional(),
   steps: z.array(WorkflowRunStepsDetailsDto$inboundSchema),
 });
 

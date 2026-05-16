@@ -8,8 +8,9 @@ import {
   CompileTemplate,
   ConditionsFilter,
   CreateExecutionDetails,
+  ExecuteStepResolverRequest,
   GetDecryptedIntegrations,
-  GetLayoutUseCase,
+  GetLayoutUseCaseV0,
   GetNovuLayout,
   GetNovuProviderCredentials,
   GetPreferences,
@@ -29,7 +30,6 @@ import {
   TriggerMulticast,
   VerifyPayload,
   WorkflowInMemoryProviderService,
-  WorkflowRunService,
 } from '@novu/application-generic';
 import {
   ChannelConnectionRepository,
@@ -69,7 +69,8 @@ import { AddJob, MergeOrCreateDigest } from './usecases/add-job';
 import { InboundEmailParse } from './usecases/inbound-email-parse/inbound-email-parse.usecase';
 import { NoopSendWebhookMessage } from './usecases/noop-send-webhook-message.usecase';
 import { ResolveChannelEndpoints } from './usecases/send-message/channel-endpoint-resolution/resolve-channel-endpoints.usecase';
-import { ExecuteStepCustom } from './usecases/send-message/execute-step-custom.usecase';
+import { ExecuteCodeFirstCustomStep } from './usecases/send-message/execute-code-first-custom-step.usecase';
+import { ExecuteHttpRequestStep } from './usecases/send-message/execute-http-request-step.usecase';
 import { StoreSubscriberJobs } from './usecases/store-subscriber-jobs';
 import { SubscriberJobBound } from './usecases/subscriber-job-bound/subscriber-job-bound.usecase';
 
@@ -157,7 +158,7 @@ const USE_CASES = [
   GetDecryptedIntegrations,
   GetDigestEventsBackoff,
   GetDigestEventsRegular,
-  GetLayoutUseCase,
+  GetLayoutUseCaseV0,
   GetNovuLayout,
   GetNovuProviderCredentials,
   SelectIntegration,
@@ -175,7 +176,8 @@ const USE_CASES = [
   SendMessagePush,
   SendMessageSms,
   Throttle,
-  ExecuteStepCustom,
+  ExecuteCodeFirstCustomStep,
+  ExecuteHttpRequestStep,
   StoreSubscriberJobs,
   SetJobAsCompleted,
   SetJobAsFailed,
@@ -191,8 +193,8 @@ const USE_CASES = [
   CompileInAppTemplate,
   InboundEmailParse,
   ExecuteBridgeJob,
+  ExecuteStepResolverRequest,
   GetPreferences,
-  WorkflowRunService,
   GetSubscriberSchedule,
   ResolveChannelEndpoints,
 ];

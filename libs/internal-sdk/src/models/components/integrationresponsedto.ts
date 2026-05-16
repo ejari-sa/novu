@@ -19,7 +19,7 @@ import {
 import { StepFilterDto, StepFilterDto$inboundSchema } from "./stepfilterdto.js";
 
 /**
- * The channel type for the integration, which defines how the integration communicates (e.g., email, SMS).
+ * The channel type for the integration, which defines how it communicates (e.g., email, SMS).
  */
 export const IntegrationResponseDtoChannel = {
   InApp: "in_app",
@@ -29,7 +29,7 @@ export const IntegrationResponseDtoChannel = {
   Push: "push",
 } as const;
 /**
- * The channel type for the integration, which defines how the integration communicates (e.g., email, SMS).
+ * The channel type for the integration, which defines how it communicates (e.g., email, SMS).
  */
 export type IntegrationResponseDtoChannel = ClosedEnum<
   typeof IntegrationResponseDtoChannel
@@ -61,7 +61,7 @@ export type IntegrationResponseDto = {
    */
   providerId: string;
   /**
-   * The channel type for the integration, which defines how the integration communicates (e.g., email, SMS).
+   * The channel type for the integration, which defines how it communicates (e.g., email, SMS).
    */
   channel: IntegrationResponseDtoChannel;
   /**

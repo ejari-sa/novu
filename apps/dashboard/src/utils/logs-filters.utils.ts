@@ -1,9 +1,10 @@
-import { type OrganizationResource } from '@clerk/types';
 import { ApiServiceLevelEnum, FeatureNameEnum, type GetSubscriptionDto, getFeatureForTierAsNumber } from '@novu/shared';
 import { subMilliseconds } from 'date-fns';
 import { IS_SELF_HOSTED } from '../config';
 
-export const LOGS_DATE_RANGE_OPTIONS = [
+type OrganizationLike = { createdAt: Date };
+
+const LOGS_DATE_RANGE_OPTIONS = [
   { value: '24', label: 'Last 24 Hours', ms: 24 * 60 * 60 * 1000 },
   { value: '168', label: '7 Days', ms: 7 * 24 * 60 * 60 * 1000 }, // 7 * 24
   { value: '720', label: '30 Days', ms: 30 * 24 * 60 * 60 * 1000 }, // 30 * 24
@@ -15,7 +16,7 @@ export function buildLogsDateFilters({
   organization,
   apiServiceLevel,
 }: {
-  organization: OrganizationResource;
+  organization: OrganizationLike;
   apiServiceLevel?: ApiServiceLevelEnum;
 }) {
   const maxActivityFeedRetentionMs = getFeatureForTierAsNumber(
@@ -47,7 +48,7 @@ export function getMaxAvailableLogsDateRange({
   organization,
 }: Partial<{
   subscription: GetSubscriptionDto | null;
-  organization: OrganizationResource | null;
+  organization: OrganizationLike | null;
 }>) {
   if (!organization || !subscription) {
     const defaultMs = 24 * 60 * 60 * 1000; // 24 hours

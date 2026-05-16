@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InstrumentUsecase } from '@novu/application-generic';
 import {
   SubscriberRepository,
@@ -33,11 +33,16 @@ export class ListTopicSubscriptionsUseCase {
       throw new NotFoundException(`Topic with key ${command.topicKey} not found`);
     }
 
+    if (command.before && command.after) {
+      throw new BadRequestException('Cannot specify both "before" and "after" cursors at the same time.');
+    }
+
     const subscriptionsPagination = await this.topicSubscribersRepository.findTopicSubscriptionsWithPagination({
       environmentId: command.environmentId,
       organizationId: command.organizationId,
       topicKey: command.topicKey,
       subscriberId: command.subscriberId,
+      contextKeys: command.contextKeys,
       limit: command.limit || 10,
       before: command.before,
       after: command.after,

@@ -10,6 +10,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { NovuError } from "../models/errors/novuerror.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { useNovuContext } from "./_context.js";
 import {
   QueryHookOptions,
@@ -29,8 +40,20 @@ export {
   queryKeyEnvironmentsGetTags,
 };
 
+export type EnvironmentsGetTagsQueryError =
+  | errors.ErrorDto
+  | errors.ValidationErrorDto
+  | NovuError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
- * Get environment tags
+ * List environment tags
  *
  * @remarks
  * Retrieve all unique tags used in workflows within the specified environment. These tags can be used for filtering workflows.
@@ -38,8 +61,11 @@ export {
 export function useEnvironmentsGetTags(
   environmentId: string,
   idempotencyKey?: string | undefined,
-  options?: QueryHookOptions<EnvironmentsGetTagsQueryData>,
-): UseQueryResult<EnvironmentsGetTagsQueryData, Error> {
+  options?: QueryHookOptions<
+    EnvironmentsGetTagsQueryData,
+    EnvironmentsGetTagsQueryError
+  >,
+): UseQueryResult<EnvironmentsGetTagsQueryData, EnvironmentsGetTagsQueryError> {
   const client = useNovuContext();
   return useQuery({
     ...buildEnvironmentsGetTagsQuery(
@@ -53,7 +79,7 @@ export function useEnvironmentsGetTags(
 }
 
 /**
- * Get environment tags
+ * List environment tags
  *
  * @remarks
  * Retrieve all unique tags used in workflows within the specified environment. These tags can be used for filtering workflows.
@@ -61,8 +87,14 @@ export function useEnvironmentsGetTags(
 export function useEnvironmentsGetTagsSuspense(
   environmentId: string,
   idempotencyKey?: string | undefined,
-  options?: SuspenseQueryHookOptions<EnvironmentsGetTagsQueryData>,
-): UseSuspenseQueryResult<EnvironmentsGetTagsQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    EnvironmentsGetTagsQueryData,
+    EnvironmentsGetTagsQueryError
+  >,
+): UseSuspenseQueryResult<
+  EnvironmentsGetTagsQueryData,
+  EnvironmentsGetTagsQueryError
+> {
   const client = useNovuContext();
   return useSuspenseQuery({
     ...buildEnvironmentsGetTagsQuery(

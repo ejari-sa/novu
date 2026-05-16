@@ -31,6 +31,8 @@ import { Result } from "../types/fp.js";
  *
  * @remarks
  * Update an existing channel endpoint by its unique identifier.
+ *
+ * This operation requires one of {@link Security.bearerAuth}, {@link Security.secretKey}, or {@link Security.secretKey} to be set on the `security` parameter when initializing the SDK.
  */
 export function channelEndpointsUpdate(
   client: NovuCore,
@@ -115,7 +117,6 @@ async function $do(
       charEncoding: "percent",
     }),
   };
-
   const path = pathToFunc("/v1/channel-endpoints/{identifier}")(pathParams);
 
   const headers = new Headers(compactMap({
@@ -129,7 +130,7 @@ async function $do(
   }));
 
   const securityInput = await extractSecurity(client._options.security);
-  const requestSecurity = resolveGlobalSecurity(securityInput);
+  const requestSecurity = resolveGlobalSecurity(securityInput, [1, 0]);
 
   const context = {
     options: client._options,

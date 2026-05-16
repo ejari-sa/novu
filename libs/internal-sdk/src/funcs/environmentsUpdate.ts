@@ -32,6 +32,8 @@ import { Result } from "../types/fp.js";
  * @remarks
  * Update an environment by its unique identifier **environmentId**.
  *     You can modify the environment name, identifier, color, and other configuration settings.
+ *
+ * This operation requires either {@link Security.bearerAuth} or {@link Security.secretKey} to be set on the `security` parameter when initializing the SDK.
  */
 export function environmentsUpdate(
   client: NovuCore,
@@ -115,7 +117,6 @@ async function $do(
       charEncoding: "percent",
     }),
   };
-
   const path = pathToFunc("/v1/environments/{environmentId}")(pathParams);
 
   const headers = new Headers(compactMap({
@@ -129,7 +130,7 @@ async function $do(
   }));
 
   const securityInput = await extractSecurity(client._options.security);
-  const requestSecurity = resolveGlobalSecurity(securityInput);
+  const requestSecurity = resolveGlobalSecurity(securityInput, [1, 0]);
 
   const context = {
     options: client._options,

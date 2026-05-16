@@ -79,7 +79,7 @@ function SidebarButton({
       type="button"
       onClick={onClick}
       className={`flex w-full items-center gap-2 rounded-xl border border-transparent p-1.5 transition-colors hover:cursor-pointer hover:bg-gray-100 ${
-        isActive ? '!border-[#EEEFF1] bg-white' : ''
+        isActive ? 'border-[#EEEFF1]! bg-white' : ''
       }`}
     >
       {content}
@@ -220,7 +220,7 @@ export function WorkflowSidebar({ selectedCategory, onCategorySelect }: Workflow
     },
     {
       key: 'code-based',
-      icon: <Code2 className="h-3 w-3 text-gray-700" />,
+      icon: <Code2 className="h-3 w-3 text-feature" />,
       label: 'Code-based workflow',
       hasExternalLink: true,
       bgColor: 'bg-blue-50',

@@ -32,6 +32,8 @@ import { Result } from "../types/fp.js";
  * @remarks
  * Update a subscriber by its unique key identifier **subscriberId**.
  *     **subscriberId** is a required field, rest other fields are optional
+ *
+ * This operation requires either {@link Security.bearerAuth} or {@link Security.secretKey} to be set on the `security` parameter when initializing the SDK.
  */
 export function subscribersPatch(
   client: NovuCore,
@@ -114,7 +116,6 @@ async function $do(
       charEncoding: "percent",
     }),
   };
-
   const path = pathToFunc("/v2/subscribers/{subscriberId}")(pathParams);
 
   const headers = new Headers(compactMap({
@@ -128,7 +129,7 @@ async function $do(
   }));
 
   const securityInput = await extractSecurity(client._options.security);
-  const requestSecurity = resolveGlobalSecurity(securityInput);
+  const requestSecurity = resolveGlobalSecurity(securityInput, [1, 0]);
 
   const context = {
     options: client._options,

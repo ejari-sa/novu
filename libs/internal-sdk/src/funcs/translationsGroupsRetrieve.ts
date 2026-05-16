@@ -30,6 +30,8 @@ import { Result } from "../types/fp.js";
  *
  * @remarks
  * Retrieves a single translation group by resource type (workflow, layout) and resource ID (workflowId, layoutId)
+ *
+ * This operation requires one of {@link Security.secretKey}, {@link Security.bearerAuth}, or {@link Security.secretKey} to be set on the `security` parameter when initializing the SDK.
  */
 export function translationsGroupsRetrieve(
   client: NovuCore,
@@ -114,7 +116,6 @@ async function $do(
       charEncoding: "percent",
     }),
   };
-
   const path = pathToFunc("/v2/translations/group/{resourceType}/{resourceId}")(
     pathParams,
   );
@@ -129,7 +130,7 @@ async function $do(
   }));
 
   const securityInput = await extractSecurity(client._options.security);
-  const requestSecurity = resolveGlobalSecurity(securityInput);
+  const requestSecurity = resolveGlobalSecurity(securityInput, [0, 1]);
 
   const context = {
     options: client._options,

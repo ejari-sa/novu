@@ -17,7 +17,7 @@ import {
 /**
  * Rich context object with id and optional data
  */
-export type Context2 = {
+export type CreateChannelConnectionRequestDtoContext2 = {
   id: string;
   /**
    * Optional additional context data
@@ -25,7 +25,9 @@ export type Context2 = {
   data?: { [k: string]: any } | undefined;
 };
 
-export type CreateChannelConnectionRequestDtoContext = Context2 | string;
+export type CreateChannelConnectionRequestDtoContext =
+  | CreateChannelConnectionRequestDtoContext2
+  | string;
 
 export type CreateChannelConnectionRequestDto = {
   /**
@@ -36,7 +38,9 @@ export type CreateChannelConnectionRequestDto = {
    * The subscriber ID to link the channel connection to
    */
   subscriberId?: string | undefined;
-  context?: { [k: string]: Context2 | string } | undefined;
+  context?:
+    | { [k: string]: CreateChannelConnectionRequestDtoContext2 | string }
+    | undefined;
   /**
    * The identifier of the integration to use for this channel connection.
    */
@@ -46,28 +50,36 @@ export type CreateChannelConnectionRequestDto = {
 };
 
 /** @internal */
-export type Context2$Outbound = {
+export type CreateChannelConnectionRequestDtoContext2$Outbound = {
   id: string;
   data?: { [k: string]: any } | undefined;
 };
 
 /** @internal */
-export const Context2$outboundSchema: z.ZodType<
-  Context2$Outbound,
-  z.ZodTypeDef,
-  Context2
-> = z.object({
-  id: z.string(),
-  data: z.record(z.any()).optional(),
-});
+export const CreateChannelConnectionRequestDtoContext2$outboundSchema:
+  z.ZodType<
+    CreateChannelConnectionRequestDtoContext2$Outbound,
+    z.ZodTypeDef,
+    CreateChannelConnectionRequestDtoContext2
+  > = z.object({
+    id: z.string(),
+    data: z.record(z.any()).optional(),
+  });
 
-export function context2ToJSON(context2: Context2): string {
-  return JSON.stringify(Context2$outboundSchema.parse(context2));
+export function createChannelConnectionRequestDtoContext2ToJSON(
+  createChannelConnectionRequestDtoContext2:
+    CreateChannelConnectionRequestDtoContext2,
+): string {
+  return JSON.stringify(
+    CreateChannelConnectionRequestDtoContext2$outboundSchema.parse(
+      createChannelConnectionRequestDtoContext2,
+    ),
+  );
 }
 
 /** @internal */
 export type CreateChannelConnectionRequestDtoContext$Outbound =
-  | Context2$Outbound
+  | CreateChannelConnectionRequestDtoContext2$Outbound
   | string;
 
 /** @internal */
@@ -75,7 +87,10 @@ export const CreateChannelConnectionRequestDtoContext$outboundSchema: z.ZodType<
   CreateChannelConnectionRequestDtoContext$Outbound,
   z.ZodTypeDef,
   CreateChannelConnectionRequestDtoContext
-> = z.union([z.lazy(() => Context2$outboundSchema), z.string()]);
+> = z.union([
+  z.lazy(() => CreateChannelConnectionRequestDtoContext2$outboundSchema),
+  z.string(),
+]);
 
 export function createChannelConnectionRequestDtoContextToJSON(
   createChannelConnectionRequestDtoContext:
@@ -92,7 +107,9 @@ export function createChannelConnectionRequestDtoContextToJSON(
 export type CreateChannelConnectionRequestDto$Outbound = {
   identifier?: string | undefined;
   subscriberId?: string | undefined;
-  context?: { [k: string]: Context2$Outbound | string } | undefined;
+  context?: {
+    [k: string]: CreateChannelConnectionRequestDtoContext2$Outbound | string;
+  } | undefined;
   integrationIdentifier: string;
   workspace: WorkspaceDto$Outbound;
   auth: AuthDto$Outbound;
@@ -107,7 +124,10 @@ export const CreateChannelConnectionRequestDto$outboundSchema: z.ZodType<
   identifier: z.string().optional(),
   subscriberId: z.string().optional(),
   context: z.record(
-    z.union([z.lazy(() => Context2$outboundSchema), z.string()]),
+    z.union([
+      z.lazy(() => CreateChannelConnectionRequestDtoContext2$outboundSchema),
+      z.string(),
+    ]),
   ).optional(),
   integrationIdentifier: z.string(),
   workspace: WorkspaceDto$outboundSchema,

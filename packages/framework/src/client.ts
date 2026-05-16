@@ -63,11 +63,14 @@ export class Client {
 
   public strictAuthentication: boolean;
 
+  public verbose: boolean;
+
   constructor(options?: ClientOptions) {
     const builtOpts = this.buildOptions(options);
     this.apiUrl = builtOpts.apiUrl;
     this.secretKey = builtOpts.secretKey;
     this.strictAuthentication = builtOpts.strictAuthentication;
+    this.verbose = builtOpts.verbose;
     this.templateEngine = createLiquidEngine();
   }
 
@@ -76,6 +79,7 @@ export class Client {
       apiUrl: resolveApiUrl(providedOptions?.apiUrl),
       secretKey: resolveSecretKey(providedOptions?.secretKey),
       strictAuthentication: !isRuntimeInDevelopment(),
+      verbose: isRuntimeInDevelopment(),
     };
 
     if (providedOptions?.strictAuthentication !== undefined) {
@@ -84,7 +88,17 @@ export class Client {
       builtConfiguration.strictAuthentication = process.env.NOVU_STRICT_AUTHENTICATION_ENABLED === 'true';
     }
 
+    if (providedOptions?.verbose !== undefined) {
+      builtConfiguration.verbose = providedOptions.verbose;
+    }
+
     return builtConfiguration;
+  }
+
+  private log(...args: any[]): void {
+    if (this.verbose) {
+      console.log(...args);
+    }
   }
 
   /**
@@ -117,7 +131,7 @@ export class Client {
   private async addWorkflow(workflow: Workflow): Promise<void> {
     try {
       const definition = await workflow.discover();
-      prettyPrintDiscovery(definition);
+      prettyPrintDiscovery(definition, this.verbose);
       this.discoveredWorkflows.set(workflow.id, definition);
     } finally {
       this.discoverWorkflowPromises.delete(workflow.id);
@@ -181,7 +195,14 @@ export class Client {
    * @returns mocked data
    */
   private mock(schema: Schema): Record<string, unknown> {
-    return mockSchema(schema) as Record<string, unknown>;
+    try {
+      return mockSchema(schema) as Record<string, unknown>;
+    } catch (error) {
+      // If JSONSchemaFaker fails, return an empty object as fallback
+      // This prevents the preview from crashing on complex schemas
+      console.warn('Failed to mock schema, returning empty object:', error);
+      return {};
+    }
   }
 
   private async validate<T extends Record<string, unknown>>(
@@ -389,7 +410,7 @@ export class Client {
     const actionMessage = actionMessages[event.action];
 
     const actionMessageFormatted = `${actionMessage} workflowId:`;
-    console.log(`\n${log.bold(log.underline(actionMessageFormatted))} '${event.workflowId}'`);
+    this.log(`\n${log.bold(log.underline(actionMessageFormatted))} '${event.workflowId}'`);
     const workflow = this.getWorkflow(event.workflowId);
 
     const startTime = process.hrtime();
@@ -447,7 +468,7 @@ export class Client {
         concludeExecutionPromise,
         workflow.execute({
           payload: executionData,
-          environment: {},
+          env: event.env,
           controls: {},
           subscriber: event.subscriber,
           context: event.context,
@@ -480,7 +501,7 @@ export class Client {
     } as const;
     const resultMessage = resultMessages[event.action];
 
-    console.log(`${emoji} ${resultMessage} workflowId: \`${event.workflowId}\``);
+    this.log(`${emoji} ${resultMessage} workflowId: \`${event.workflowId}\``);
 
     this.prettyPrintExecute(event, elapsedTimeInMilliseconds, executionError);
 
@@ -523,6 +544,8 @@ export class Client {
   }
 
   private prettyPrintExecute(event: Event, duration: number, error?: Error): void {
+    if (!this.verbose) return;
+
     const successPrefix = error ? EMOJI.ERROR : EMOJI.SUCCESS;
     const actionMessages = {
       [PostActionEnum.EXECUTE]: 'Executed',
@@ -568,7 +591,7 @@ export class Client {
 
     outputs: Record<string, unknown>
   ): Record<string, unknown> {
-    console.log(`  ${EMOJI.MOCK} Mocked provider: \`${provider.type}\``);
+    this.log(`  ${EMOJI.MOCK} Mocked provider: \`${provider.type}\``);
     const mockOutput = this.mock(provider.outputs.schema);
 
     return mockOutput;
@@ -596,7 +619,7 @@ export class Client {
           step.stepId,
           provider.type
         );
-        console.log(`  ${EMOJI.SUCCESS} Executed provider: \`${provider.type}\``);
+        this.log(`  ${EMOJI.SUCCESS} Executed provider: \`${provider.type}\``);
 
         return {
           ...validatedOutput,
@@ -604,12 +627,12 @@ export class Client {
         };
       } else {
         // No-op. We don't execute providers for hydrated steps
-        console.log(`  ${EMOJI.HYDRATED} Hydrated provider: \`${provider.type}\``);
+        this.log(`  ${EMOJI.HYDRATED} Hydrated provider: \`${provider.type}\``);
 
         return {};
       }
     } catch (error) {
-      console.log(`  ${EMOJI.ERROR} Failed to execute provider: \`${provider.type}\``);
+      this.log(`  ${EMOJI.ERROR} Failed to execute provider: \`${provider.type}\``);
 
       throw new ProviderExecutionFailedError(provider.type, event.action, error);
     }
@@ -635,14 +658,14 @@ export class Client {
 
         const providers = await this.executeProviders(event, step, validatedOutput);
 
-        console.log(`  ${EMOJI.SUCCESS} Executed stepId: \`${step.stepId}\``);
+        this.log(`  ${EMOJI.SUCCESS} Executed stepId: \`${step.stepId}\``);
 
         return {
           outputs: validatedOutput,
           providers,
         };
       } catch (error) {
-        console.log(`  ${EMOJI.ERROR} Failed to execute stepId: \`${step.stepId}\``);
+        this.log(`  ${EMOJI.ERROR} Failed to execute stepId: \`${step.stepId}\``);
         if (isFrameworkError(error)) {
           throw error;
         } else {
@@ -662,7 +685,7 @@ export class Client {
             event.workflowId,
             step.stepId
           );
-          console.log(`  ${EMOJI.HYDRATED} Hydrated stepId: \`${step.stepId}\``);
+          this.log(`  ${EMOJI.HYDRATED} Hydrated stepId: \`${step.stepId}\``);
 
           return {
             outputs: validatedOutput,
@@ -672,7 +695,7 @@ export class Client {
           throw new ExecutionStateCorruptError(event.workflowId, step.stepId);
         }
       } catch (error) {
-        console.log(`  ${EMOJI.ERROR} Failed to hydrate stepId: \`${step.stepId}\``);
+        this.log(`  ${EMOJI.ERROR} Failed to hydrate stepId: \`${step.stepId}\``);
 
         throw error;
       }
@@ -698,6 +721,7 @@ export class Client {
         subscriber: event.subscriber,
         context: event.context,
         steps: buildSteps(event.state),
+        env: event.env ?? {},
       };
 
       const compiledString = await this.templateEngine.render(parsedTemplate, renderVariables);
@@ -767,7 +791,7 @@ export class Client {
     try {
       return await this.constructStepForPreview(event, step);
     } catch (error) {
-      console.log(`  ${EMOJI.ERROR} Failed to preview stepId: \`${step.stepId}\``);
+      this.log(`  ${EMOJI.ERROR} Failed to preview stepId: \`${step.stepId}\``);
 
       if (isFrameworkError(error)) {
         throw error;
@@ -812,7 +836,7 @@ export class Client {
       step.stepId
     );
 
-    console.log(`  ${EMOJI.MOCK} Mocked stepId: \`${step.stepId}\``);
+    this.log(`  ${EMOJI.MOCK} Mocked stepId: \`${step.stepId}\``);
 
     return {
       outputs: validatedOutput,

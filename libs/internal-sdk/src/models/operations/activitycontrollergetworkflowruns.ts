@@ -13,13 +13,13 @@ export const QueryParamStatuses = {
 } as const;
 export type QueryParamStatuses = ClosedEnum<typeof QueryParamStatuses>;
 
-export const Severity = {
+export const QueryParamSeverity = {
   High: "high",
   Medium: "medium",
   Low: "low",
   None: "none",
 } as const;
-export type Severity = ClosedEnum<typeof Severity>;
+export type QueryParamSeverity = ClosedEnum<typeof QueryParamSeverity>;
 
 export type ActivityControllerGetWorkflowRunsRequest = {
   limit?: number | undefined;
@@ -30,9 +30,10 @@ export type ActivityControllerGetWorkflowRunsRequest = {
   statuses?: Array<QueryParamStatuses> | undefined;
   channels?: Array<string> | undefined;
   topicKey?: string | undefined;
+  subscriptionId?: string | undefined;
   createdGte?: string | undefined;
   createdLte?: string | undefined;
-  severity?: Array<Severity> | undefined;
+  severity?: Array<QueryParamSeverity> | undefined;
   contextKeys?: Array<string> | undefined;
   /**
    * A header for idempotency purposes
@@ -46,8 +47,9 @@ export const QueryParamStatuses$outboundSchema: z.ZodNativeEnum<
 > = z.nativeEnum(QueryParamStatuses);
 
 /** @internal */
-export const Severity$outboundSchema: z.ZodNativeEnum<typeof Severity> = z
-  .nativeEnum(Severity);
+export const QueryParamSeverity$outboundSchema: z.ZodNativeEnum<
+  typeof QueryParamSeverity
+> = z.nativeEnum(QueryParamSeverity);
 
 /** @internal */
 export type ActivityControllerGetWorkflowRunsRequest$Outbound = {
@@ -59,6 +61,7 @@ export type ActivityControllerGetWorkflowRunsRequest$Outbound = {
   statuses?: Array<string> | undefined;
   channels?: Array<string> | undefined;
   topicKey?: string | undefined;
+  subscriptionId?: string | undefined;
   createdGte?: string | undefined;
   createdLte?: string | undefined;
   severity?: Array<string> | undefined;
@@ -80,9 +83,10 @@ export const ActivityControllerGetWorkflowRunsRequest$outboundSchema: z.ZodType<
   statuses: z.array(QueryParamStatuses$outboundSchema).optional(),
   channels: z.array(z.string()).optional(),
   topicKey: z.string().optional(),
+  subscriptionId: z.string().optional(),
   createdGte: z.string().optional(),
   createdLte: z.string().optional(),
-  severity: z.array(Severity$outboundSchema).optional(),
+  severity: z.array(QueryParamSeverity$outboundSchema).optional(),
   contextKeys: z.array(z.string()).optional(),
   idempotencyKey: z.string().optional(),
 }).transform((v) => {

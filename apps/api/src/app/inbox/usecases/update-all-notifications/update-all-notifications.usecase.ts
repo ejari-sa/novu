@@ -9,7 +9,7 @@ import {
   WebSocketsQueueService,
 } from '@novu/application-generic';
 import { EnvironmentEntity, EnvironmentRepository, MessageEntity, MessageRepository } from '@novu/dal';
-import { WebhookEventEnum, WebhookObjectTypeEnum, WebSocketEventEnum } from '@novu/shared';
+import { normalizeTagGroups, WebhookEventEnum, WebhookObjectTypeEnum, WebSocketEventEnum } from '@novu/shared';
 
 import { GetSubscriber } from '../../../subscribers/usecases/get-subscriber';
 import { AnalyticsEventsEnum } from '../../utils';
@@ -61,6 +61,11 @@ export class UpdateAllNotifications {
       fromField.data = parsedData;
     }
 
+    if (command.from.tags !== undefined) {
+      fromField.tagGroups = normalizeTagGroups(command.from.tags);
+      delete fromField.tags;
+    }
+
     const updatedMessages = await this.messageRepository.updateMessagesFromToStatus({
       environmentId: command.environmentId,
       subscriberId: subscriber._id,
@@ -92,7 +97,7 @@ export class UpdateAllNotifications {
         event: WebSocketEventEnum.UNREAD,
         userId: subscriber._id,
         _environmentId: command.environmentId,
-        ...(command.contextKeys && { contextKeys: command.contextKeys }),
+        contextKeys: command.contextKeys ?? [],
       },
       groupId: subscriber._organizationId,
     });

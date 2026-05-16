@@ -10,6 +10,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { NovuError } from "../models/errors/novuerror.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useNovuContext } from "./_context.js";
 import {
@@ -30,6 +41,18 @@ export {
   type SubscribersPreferencesListQueryData,
 };
 
+export type SubscribersPreferencesListQueryError =
+  | errors.ErrorDto
+  | errors.ValidationErrorDto
+  | NovuError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * Retrieve subscriber preferences
  *
@@ -38,18 +61,20 @@ export {
  *     This API returns all five channels preferences for all workflows and global preferences.
  */
 export function useSubscribersPreferencesList(
-  subscriberId: string,
-  criticality?: operations.Criticality | undefined,
-  idempotencyKey?: string | undefined,
-  options?: QueryHookOptions<SubscribersPreferencesListQueryData>,
-): UseQueryResult<SubscribersPreferencesListQueryData, Error> {
+  request: operations.SubscribersControllerGetSubscriberPreferencesRequest,
+  options?: QueryHookOptions<
+    SubscribersPreferencesListQueryData,
+    SubscribersPreferencesListQueryError
+  >,
+): UseQueryResult<
+  SubscribersPreferencesListQueryData,
+  SubscribersPreferencesListQueryError
+> {
   const client = useNovuContext();
   return useQuery({
     ...buildSubscribersPreferencesListQuery(
       client,
-      subscriberId,
-      criticality,
-      idempotencyKey,
+      request,
       options,
     ),
     ...options,
@@ -64,18 +89,20 @@ export function useSubscribersPreferencesList(
  *     This API returns all five channels preferences for all workflows and global preferences.
  */
 export function useSubscribersPreferencesListSuspense(
-  subscriberId: string,
-  criticality?: operations.Criticality | undefined,
-  idempotencyKey?: string | undefined,
-  options?: SuspenseQueryHookOptions<SubscribersPreferencesListQueryData>,
-): UseSuspenseQueryResult<SubscribersPreferencesListQueryData, Error> {
+  request: operations.SubscribersControllerGetSubscriberPreferencesRequest,
+  options?: SuspenseQueryHookOptions<
+    SubscribersPreferencesListQueryData,
+    SubscribersPreferencesListQueryError
+  >,
+): UseSuspenseQueryResult<
+  SubscribersPreferencesListQueryData,
+  SubscribersPreferencesListQueryError
+> {
   const client = useNovuContext();
   return useSuspenseQuery({
     ...buildSubscribersPreferencesListQuery(
       client,
-      subscriberId,
-      criticality,
-      idempotencyKey,
+      request,
       options,
     ),
     ...options,
@@ -88,6 +115,7 @@ export function setSubscribersPreferencesListData(
     subscriberId: string,
     parameters: {
       criticality?: operations.Criticality | undefined;
+      contextKeys?: Array<string> | undefined;
       idempotencyKey?: string | undefined;
     },
   ],
@@ -105,6 +133,7 @@ export function invalidateSubscribersPreferencesList(
       subscriberId: string,
       parameters: {
         criticality?: operations.Criticality | undefined;
+        contextKeys?: Array<string> | undefined;
         idempotencyKey?: string | undefined;
       },
     ]

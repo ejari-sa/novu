@@ -28,8 +28,8 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
-# Install Node.js 20 using NodeSource repository (faster than using Node image)
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+# Install Node.js 22 using NodeSource repository (faster than using Node image)
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y nodejs \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
@@ -46,7 +46,7 @@ RUN wget -qO - https://www.mongodb.org/static/pgp/server-7.0.asc | apt-key add -
 
 # Install pnpm and TypeScript globally
 RUN npm --no-update-notifier --no-fund --global install \
-    pnpm@10.16.1 \
+    pnpm@10.33.0 \
     typescript@5.6.2 \
     && npm cache clean --force
 

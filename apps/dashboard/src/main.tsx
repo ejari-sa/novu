@@ -17,18 +17,22 @@ import {
   CreateWorkflowPage,
   ErrorPage,
   IntegrationsListPage,
+  InvitationAcceptPage,
   LayoutsPage,
   OrganizationListPage,
   SettingsPage,
   SignInPage,
   SignUpPage,
+  SSOSignInPage,
   TemplateModal,
   TranslationsPage,
+  VerifyEmailPage,
   WelcomePage,
   WorkflowsPage,
 } from '@/pages';
 import { DuplicateWorkflowPage } from '@/pages/duplicate-workflow';
 import { EditStepTemplateV2Page } from '@/pages/edit-step-template-v2';
+import { Landing1SignUpPage } from '@/pages/landing-1-signup';
 import { SubscribersPage } from '@/pages/subscribers';
 import { TranslationSettingsPage } from '@/pages/translation-settings-page';
 import { WebhooksPage } from '@/pages/webhooks-page';
@@ -49,15 +53,20 @@ import { EditTopicPage } from './pages/edit-topic';
 import { EditTranslationPage } from './pages/edit-translation';
 import { EditWorkflowPage } from './pages/edit-workflow';
 import { EnvironmentsPage } from './pages/environments';
+import { ForgotPasswordPage } from './pages/forgot-password';
 import { InboxEmbedPage } from './pages/inbox-embed-page';
 import { InboxEmbedSuccessPage } from './pages/inbox-embed-success-page';
 import { InboxUsecasePage } from './pages/inbox-usecase-page';
 import { RedirectToLegacyStudioAuth } from './pages/redirect-to-legacy-studio-auth';
+import { ResetPasswordPage } from './pages/reset-password';
 import { TestWorkflowDrawerPage } from './pages/test-workflow-drawer-page';
 import { TestWorkflowRouteHandler } from './pages/test-workflow-route-handler';
 import { TopicsPage } from './pages/topics';
+import { AgentsPage } from './pages/agents';
+import { UpsertVariablePage } from './pages/upsert-variable';
+import { VariablesPage } from './pages/variables';
 import { VercelIntegrationPage } from './pages/vercel-integration-page';
-import { AuthRoute, CatchAllRoute, DashboardRoute, RootRoute } from './routes';
+import { AuthRoute, CatchAllRoute, DashboardRoute, ProtectedAuthRoute, RootRoute } from './routes';
 import { OnboardingParentRoute } from './routes/onboarding';
 import { ProtectedRoute } from './routes/protected-route';
 import { ROUTES } from './utils/routes';
@@ -73,6 +82,10 @@ const router = createBrowserRouter([
     errorElement: <ErrorPage />,
     children: [
       {
+        path: `${ROUTES.LANDING_1_SIGN_UP}/*`,
+        element: <Landing1SignUpPage />,
+      },
+      {
         element: <AuthRoute />,
         children: [
           {
@@ -84,8 +97,33 @@ const router = createBrowserRouter([
             element: <SignUpPage />,
           },
           {
+            path: ROUTES.FORGOT_PASSWORD,
+            element: <ForgotPasswordPage />,
+          },
+          {
+            path: ROUTES.RESET_PASSWORD,
+            element: <ResetPasswordPage />,
+          },
+          {
+            path: ROUTES.SSO_SIGN_IN,
+            element: <SSOSignInPage />,
+          },
+          {
+            path: ROUTES.VERIFY_EMAIL,
+            element: <VerifyEmailPage />,
+          },
+        ],
+      },
+      {
+        element: <ProtectedAuthRoute />,
+        children: [
+          {
             path: ROUTES.SIGNUP_ORGANIZATION_LIST,
             element: <OrganizationListPage />,
+          },
+          {
+            path: ROUTES.INVITATION_ACCEPT,
+            element: <InvitationAcceptPage />,
           },
         ],
       },
@@ -313,6 +351,10 @@ const router = createBrowserRouter([
                 ],
               },
               {
+                path: ROUTES.AGENTS,
+                element: <AgentsPage />,
+              },
+              {
                 path: ROUTES.API_KEYS,
                 element: (
                   <ProtectedRoute permission={PermissionsEnum.API_KEY_READ}>
@@ -323,6 +365,20 @@ const router = createBrowserRouter([
               {
                 path: ROUTES.ENVIRONMENTS,
                 element: <EnvironmentsPage />,
+              },
+              {
+                path: ROUTES.VARIABLES,
+                element: <VariablesPage />,
+                children: [
+                  {
+                    path: ROUTES.VARIABLES_CREATE,
+                    element: (
+                      <ProtectedRoute permission={PermissionsEnum.ORG_SETTINGS_WRITE} isDrawerRoute>
+                        <UpsertVariablePage />
+                      </ProtectedRoute>
+                    ),
+                  },
+                ],
               },
               {
                 path: ROUTES.ACTIVITY_FEED,

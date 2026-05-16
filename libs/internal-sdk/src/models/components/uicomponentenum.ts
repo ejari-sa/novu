@@ -3,7 +3,8 @@
  */
 
 import * as z from "zod/v3";
-import { ClosedEnum } from "../../types/enums.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 
 /**
  * Component type for the UI Schema Property
@@ -46,13 +47,23 @@ export const UiComponentEnum = {
   QueryEditor: "QUERY_EDITOR",
   Data: "DATA",
   LayoutEmail: "LAYOUT_EMAIL",
+  DestinationMethod: "DESTINATION_METHOD",
+  DestinationUrl: "DESTINATION_URL",
+  DestinationHeaders: "DESTINATION_HEADERS",
+  DestinationBody: "DESTINATION_BODY",
+  DestinationResponseBodySchema: "DESTINATION_RESPONSE_BODY_SCHEMA",
+  DestinationEnforceSchemaValidation: "DESTINATION_ENFORCE_SCHEMA_VALIDATION",
+  DestinationContinueOnFailure: "DESTINATION_CONTINUE_ON_FAILURE",
+  DestinationTimeout: "DESTINATION_TIMEOUT",
 } as const;
 /**
  * Component type for the UI Schema Property
  */
-export type UiComponentEnum = ClosedEnum<typeof UiComponentEnum>;
+export type UiComponentEnum = OpenEnum<typeof UiComponentEnum>;
 
 /** @internal */
-export const UiComponentEnum$inboundSchema: z.ZodNativeEnum<
-  typeof UiComponentEnum
-> = z.nativeEnum(UiComponentEnum);
+export const UiComponentEnum$inboundSchema: z.ZodType<
+  UiComponentEnum,
+  z.ZodTypeDef,
+  unknown
+> = openEnums.inboundSchema(UiComponentEnum);

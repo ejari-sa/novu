@@ -39,7 +39,7 @@ export type InAppStepResponseDtoControlValues = {
    */
   subject?: string | undefined;
   /**
-   * URL for an avatar image. Must be a valid URL or start with / or {{"{{"}} variable }}.
+   * URL for an avatar image. Must be a valid URL or start with / or {{ variable }}.
    */
   avatar?: string | undefined;
   /**
@@ -114,6 +114,10 @@ export type InAppStepResponseDto = {
    * Issues associated with the step
    */
   issues?: StepIssuesDto | undefined;
+  /**
+   * Hash identifying the deployed Cloudflare Worker for this step
+   */
+  stepResolverHash?: string | undefined;
 };
 
 /** @internal */
@@ -166,6 +170,7 @@ export const InAppStepResponseDto$inboundSchema: z.ZodType<
   workflowId: z.string(),
   workflowDatabaseId: z.string(),
   issues: StepIssuesDto$inboundSchema.optional(),
+  stepResolverHash: z.string().optional(),
 }).transform((v) => {
   return remap$(v, {
     "_id": "id",

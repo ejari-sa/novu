@@ -1,12 +1,14 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { Injectable, UnprocessableEntityException } from '@nestjs/common';
 import { ModuleRef } from '@nestjs/core';
-import type { EventType, Trace } from '@novu/application-generic';
+import type { EventType, RequestTraceInput } from '@novu/application-generic';
 import {
   ExecuteBridgeRequest,
   ExecuteBridgeRequestCommand,
   ExecuteBridgeRequestDto,
   FeatureFlagsService,
+  InMemoryLRUCacheService,
+  InMemoryLRUCacheStore,
   Instrument,
   InstrumentUsecase,
   IWorkflowDataDto,
@@ -35,7 +37,6 @@ import {
 } from '@novu/shared';
 import Ajv, { ValidateFunction } from 'ajv';
 import addFormats from 'ajv-formats';
-import { LRUCache } from 'lru-cache';
 import { generateTransactionId } from '../../../shared/helpers/generate-transaction-id';
 import { PayloadValidationException } from '../../exceptions/payload-validation-exception';
 import { RecipientSchema, RecipientsSchema } from '../../utils/trigger-recipient-validation';
@@ -48,29 +49,21 @@ import {
 const ajv = new Ajv({
   allErrors: true,
   useDefaults: true,
+  strict: false,
 });
 addFormats(ajv);
-
-const validatorCache = new LRUCache<string, ValidateFunction>({
-  max: 5000,
-  ttl: 1000 * 60 * 60,
-});
 
 function getSchemaHash(schema: object): string {
   return createHash('sha256').update(JSON.stringify(schema)).digest('hex');
 }
 
-function getCompiledValidator(schema: object): ValidateFunction {
-  const hash = getSchemaHash(schema);
-  let validate = validatorCache.get(hash);
-
-  if (!validate) {
-    validate = ajv.compile(schema);
-    validatorCache.set(hash, validate);
-  }
-
-  return validate;
-}
+export type ParseEventRequestResult = {
+  acknowledged: boolean;
+  status: TriggerEventStatusEnum;
+  transactionId: string;
+  activityFeedLink?: string;
+  jobData?: IWorkflowDataDto;
+};
 
 @Injectable()
 export class ParseEventRequest {
@@ -84,13 +77,14 @@ export class ParseEventRequest {
     private logger: PinoLogger,
     private featureFlagService: FeatureFlagsService,
     private traceLogRepository: TraceLogRepository,
-    protected moduleRef: ModuleRef
+    protected moduleRef: ModuleRef,
+    private inMemoryLRUCacheService: InMemoryLRUCacheService
   ) {
     this.logger.setContext(this.constructor.name);
   }
 
   @InstrumentUsecase()
-  public async execute(command: ParseEventRequestCommand) {
+  public async execute(command: ParseEventRequestCommand): Promise<ParseEventRequestResult> {
     const transactionId = command.transactionId || generateTransactionId();
     const requestId = command.requestId;
 
@@ -175,6 +169,7 @@ export class ParseEventRequest {
           return {
             acknowledged: true,
             status: TriggerEventStatusEnum.TENANT_MISSING,
+            transactionId,
           };
         }
       }
@@ -198,6 +193,7 @@ export class ParseEventRequest {
         return {
           acknowledged: true,
           status: TriggerEventStatusEnum.NOT_ACTIVE,
+          transactionId,
         };
       }
 
@@ -247,7 +243,7 @@ export class ParseEventRequest {
     transactionId: string;
     status?: 'success' | 'error';
     message?: string;
-    rawData?: any;
+    rawData?: unknown;
   }): Promise<void> {
     if (!requestId) {
       this.logger.warn(
@@ -259,22 +255,22 @@ export class ParseEventRequest {
     }
 
     try {
-      const traceData: Omit<Trace, 'id' | 'expires_at'> = {
+      const traceData: RequestTraceInput = {
         created_at: LogRepository.formatDateTime64(new Date()),
         organization_id: command.organizationId,
         environment_id: command.environmentId,
         user_id: command.userId,
-        subscriber_id: null,
-        external_subscriber_id: null,
+        subscriber_id: '',
+        external_subscriber_id: '',
         event_type: eventType,
         title: mapEventTypeToTitle(eventType),
-        message: message || null,
-        raw_data: rawData ? JSON.stringify(rawData) : null,
+        message: message || '',
+        raw_data: rawData ? JSON.stringify(rawData) : '',
         status,
-        entity_type: 'request',
         entity_id: requestId,
         workflow_run_identifier: command.identifier,
         workflow_id: command.workflow?._id || '',
+        provider_id: '',
       };
 
       await this.traceLogRepository.createRequest([traceData]);
@@ -321,7 +317,7 @@ export class ParseEventRequest {
     command: ParseEventRequestMulticastCommand | ParseEventRequestBroadcastCommand;
     transactionId: string;
     discoveredWorkflow?: DiscoverWorkflowOutput | null;
-  }) {
+  }): Promise<ParseEventRequestResult> {
     // biome-ignore lint/correctness/noUnusedVariables: eliminate from queue
     const { workflow, ...commandArgs } = command;
 
@@ -385,10 +381,12 @@ export class ParseEventRequest {
       );
     }
 
+    const activityFeedLink = `${process.env.DASHBOARD_URL || process.env.FRONT_BASE_URL}/env/${command.environmentId}/activity/requests?selectedLogId=${requestId}`;
     return {
       acknowledged: true,
       status: TriggerEventStatusEnum.PROCESSED,
       transactionId,
+      activityFeedLink,
       jobData: command.skipQueueInsertion ? jobData : undefined,
     };
   }
@@ -489,7 +487,7 @@ export class ParseEventRequest {
 
   @Instrument()
   private validateAndApplyPayloadDefaults(payload: Record<string, unknown>, schema: object): Record<string, unknown> {
-    const validate = getCompiledValidator(schema);
+    const validate = this.getCompiledValidator(schema);
     const payloadWithDefaults = JSON.parse(JSON.stringify(payload));
     const valid = validate(payloadWithDefaults);
 
@@ -498,5 +496,17 @@ export class ParseEventRequest {
     }
 
     return payloadWithDefaults;
+  }
+
+  private getCompiledValidator(schema: object): ValidateFunction {
+    const hash = getSchemaHash(schema);
+    let validate = this.inMemoryLRUCacheService.getIfCached(InMemoryLRUCacheStore.VALIDATOR, hash) as ValidateFunction;
+
+    if (!validate) {
+      validate = ajv.compile(schema);
+      this.inMemoryLRUCacheService.set(InMemoryLRUCacheStore.VALIDATOR, hash, validate);
+    }
+
+    return validate;
   }
 }

@@ -52,10 +52,10 @@ export class Novu implements Pick<NovuEventEmitter, 'on'> {
     this.#options = options;
     this.#inboxService = new InboxService({
       apiUrl: options.apiUrl || options.backendUrl,
-      userAgent: options.__userAgent,
     });
     this.#emitter = new NovuEventEmitter();
     const subscriber = buildSubscriber({ subscriberId: options.subscriberId, subscriber: options.subscriber });
+    const contextKey = buildContextKey(options.context);
     this.#session = new Session(
       {
         applicationIdentifier: options.applicationIdentifier || '',
@@ -82,12 +82,14 @@ export class Novu implements Pick<NovuEventEmitter, 'on'> {
     });
     this.subscriptions = new Subscriptions({
       subscriber,
+      contextKey,
       useCache: options.useCache ?? true,
       inboxServiceInstance: this.#inboxService,
       eventEmitterInstance: this.#emitter,
     });
     this.socket = createSocket({
       socketUrl: options.socketUrl,
+      socketOptions: options.socketOptions,
       eventEmitterInstance: this.#emitter,
       inboxServiceInstance: this.#inboxService,
     });

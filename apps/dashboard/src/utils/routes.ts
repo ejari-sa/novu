@@ -1,7 +1,13 @@
 export const ROUTES = {
   SIGN_IN: '/auth/sign-in',
   SIGN_UP: '/auth/sign-up',
+  LANDING_1_SIGN_UP: '/landing-1/signup',
   SIGNUP_ORGANIZATION_LIST: '/auth/organization-list',
+  INVITATION_ACCEPT: '/auth/invitation/accept',
+  FORGOT_PASSWORD: '/auth/forgot-password',
+  RESET_PASSWORD: '/auth/reset-password',
+  SSO_SIGN_IN: '/auth/sso',
+  VERIFY_EMAIL: '/auth/verify-email',
   USECASE_SELECT: '/onboarding/usecase',
   INBOX_USECASE: '/onboarding/inbox',
   INBOX_EMBED: '/onboarding/inbox/embed',
@@ -63,6 +69,9 @@ export const ROUTES = {
   LAYOUTS_EDIT: '/env/:environmentSlug/layouts/:layoutSlug',
   TRANSLATIONS: '/env/:environmentSlug/translations',
   TRANSLATIONS_EDIT: '/env/:environmentSlug/translations/:resourceType/:resourceId/:locale',
+  VARIABLES: '/env/:environmentSlug/variables',
+  VARIABLES_CREATE: '/env/:environmentSlug/variables/create',
+  AGENTS: '/env/:environmentSlug/agents',
 } as const;
 
 export const buildRoute = (route: string, params: Record<string, string>) => {

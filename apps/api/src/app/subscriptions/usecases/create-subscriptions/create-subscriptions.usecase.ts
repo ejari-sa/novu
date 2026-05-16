@@ -1,8 +1,15 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { buildDefaultSubscriptionIdentifier, InstrumentUsecase, PinoLogger } from '@novu/application-generic';
+import {
+  buildDefaultSubscriptionIdentifier,
+  FeatureFlagsService,
+  InstrumentUsecase,
+  PinoLogger,
+} from '@novu/application-generic';
 import {
   BaseRepository,
+  ContextRepository,
   CreateTopicSubscribersEntity,
+  ErrorCodesEnum,
   NotificationTemplateEntity,
   NotificationTemplateRepository,
   PreferencesRepository,
@@ -13,7 +20,13 @@ import {
   TopicSubscribersEntity,
   TopicSubscribersRepository,
 } from '@novu/dal';
-import { PreferencesTypeEnum, SeverityLevelEnum, VALID_ID_REGEX } from '@novu/shared';
+import {
+  ContextPayload,
+  FeatureFlagsKeysEnum,
+  PreferencesTypeEnum,
+  SeverityLevelEnum,
+  VALID_ID_REGEX,
+} from '@novu/shared';
 import { RulesLogic } from 'json-logic-js';
 import _ from 'lodash';
 import { GroupPreferenceFilterDto } from '../../../shared/dtos/subscriptions/create-subscriptions.dto';
@@ -35,6 +48,8 @@ export class CreateSubscriptionsUsecase {
     private preferencesRepository: PreferencesRepository,
     private notificationTemplateRepository: NotificationTemplateRepository,
     private createSubscriptionPreferencesUsecase: CreateSubscriptionPreferencesUsecase,
+    private contextRepository: ContextRepository,
+    private featureFlagsService: FeatureFlagsService,
     private logger: PinoLogger
   ) {
     this.logger.setContext(this.constructor.name);
@@ -42,6 +57,17 @@ export class CreateSubscriptionsUsecase {
 
   @InstrumentUsecase()
   async execute(command: CreateSubscriptionsCommand): Promise<CreateSubscriptionsResponseDto> {
+    const useContextFiltering = await this.featureFlagsService.getFlag({
+      key: FeatureFlagsKeysEnum.IS_CONTEXT_PREFERENCES_ENABLED,
+      defaultValue: false,
+      organization: { _id: command.organizationId },
+    });
+
+    const contextKeys = useContextFiltering
+      ? (command.contextKeys ??
+        (await this.resolveContexts(command.environmentId, command.organizationId, command.context)))
+      : undefined; // FF OFF: always ignore context
+
     const workflows = await this.validateAndFetchWorkflows(
       command.preferences,
       command.environmentId,
@@ -86,13 +112,19 @@ export class CreateSubscriptionsUsecase {
       _subscriberId: sub._id.toString(),
       identifier:
         command.subscriptions.find((s) => s.subscriberId === sub.subscriberId)?.identifier ||
-        buildDefaultSubscriptionIdentifier(command.topicKey, sub.subscriberId),
+        buildDefaultSubscriptionIdentifier(command.topicKey, sub.subscriberId, contextKeys),
     }));
+
+    const contextQuery = this.topicSubscribersRepository.buildContextExactMatchQuery(contextKeys, {
+      enabled: useContextFiltering,
+    });
+
     const existingSubscriptions = await this.topicSubscribersRepository.find({
       _environmentId: command.environmentId,
       _organizationId: command.organizationId,
       _topicId: topic._id,
       identifier: { $in: subscribersToFind.map((sub) => sub.identifier) },
+      ...contextQuery,
     });
 
     const existingSubscriberIds = existingSubscriptions.map((sub) => sub._subscriberId.toString());
@@ -109,7 +141,12 @@ export class CreateSubscriptionsUsecase {
 
     for (const subscription of existingSubscriptions) {
       const subscriber = foundSubscribers.find((sub) => sub._id.toString() === subscription._subscriberId.toString());
-      const preferences = await this.fetchPreferencesForSubscription(command, subscription, workflows);
+      const preferences = await this.fetchPreferencesForSubscription(
+        command,
+        subscription,
+        workflows,
+        useContextFiltering
+      );
 
       subscriptionData.push({
         _id: subscription._id.toString(),
@@ -133,21 +170,42 @@ export class CreateSubscriptionsUsecase {
             }
           : null,
         preferences,
+        contextKeys: subscription.contextKeys,
         createdAt: subscription.createdAt ?? '',
         updatedAt: subscription.updatedAt ?? '',
       });
     }
 
     if (subscribersToCreate.length > 0) {
-      const subscriptionsToCreate = this.buildSubscriptionEntity(topic, subscribersToCreate, command.subscriptions);
+      const subscriptionsToCreate = this.buildSubscriptionEntity(
+        topic,
+        subscribersToCreate,
+        command.subscriptions,
+        contextKeys
+      );
       const newSubscriptions = await this.topicSubscribersRepository.createSubscriptions(subscriptionsToCreate);
+
+      if (newSubscriptions.failed && newSubscriptions.failed.length > 0) {
+        errors.push(
+          ...newSubscriptions.failed.map((failure) => ({
+            subscriberId: failure.subscriberId,
+            code: 'SUBSCRIPTION_CREATE_FAILED',
+            message: failure.message,
+          }))
+        );
+      }
 
       const BATCH_SIZE = 50;
       const subscriptionBatches: TopicSubscribersEntity[][] = _.chunk(newSubscriptions.created, BATCH_SIZE);
       const preferencesArray: Array<{ subscriptionId: string; preferences: SubscriptionPreferenceDto[] }> = [];
 
       for (const batch of subscriptionBatches) {
-        const batchPreferencesArray = await this.createPreferencesForSubscriptionsBatch(command, batch, workflows);
+        const batchPreferencesArray = await this.createPreferencesForSubscriptionsBatch(
+          command,
+          batch,
+          workflows,
+          contextKeys
+        );
 
         preferencesArray.push(...batchPreferencesArray);
       }
@@ -179,6 +237,7 @@ export class CreateSubscriptionsUsecase {
               }
             : null,
           preferences,
+          contextKeys: subscription.contextKeys,
           createdAt: subscription.createdAt ?? '',
           updatedAt: subscription.updatedAt ?? '',
         });
@@ -187,7 +246,12 @@ export class CreateSubscriptionsUsecase {
       for (const subscription of newSubscriptions.updated) {
         const subscriber = foundSubscribers.find((sub) => sub._id.toString() === subscription._subscriberId.toString());
 
-        const preferences = await this.fetchPreferencesForSubscription(command, subscription, workflows);
+        const preferences = await this.fetchPreferencesForSubscription(
+          command,
+          subscription,
+          workflows,
+          useContextFiltering
+        );
 
         subscriptionData.push({
           _id: subscription._id.toString(),
@@ -211,6 +275,7 @@ export class CreateSubscriptionsUsecase {
               }
             : null,
           preferences,
+          contextKeys: subscription.contextKeys,
           createdAt: subscription.createdAt ?? '',
           updatedAt: subscription.updatedAt ?? '',
         });
@@ -238,12 +303,24 @@ export class CreateSubscriptionsUsecase {
     if (!topic) {
       this.validateTopicKey(command.topicKey);
 
-      topic = await this.topicRepository.createTopic({
-        _environmentId: command.environmentId,
-        _organizationId: command.organizationId,
-        key: command.topicKey,
-        name: command.name,
-      });
+      try {
+        topic = await this.topicRepository.createTopic({
+          _environmentId: command.environmentId,
+          _organizationId: command.organizationId,
+          key: command.topicKey,
+          name: command.name,
+        });
+      } catch (error: unknown) {
+        if (this.isDuplicateKeyError(error)) {
+          topic = await this.topicRepository.findTopicByKey(
+            command.topicKey,
+            command.organizationId,
+            command.environmentId
+          );
+        } else {
+          throw error;
+        }
+      }
     } else if (command.name) {
       topic = await this.topicRepository.findOneAndUpdate(
         {
@@ -271,6 +348,15 @@ export class CreateSubscriptionsUsecase {
 
     throw new BadRequestException(
       `Invalid topic key: "${key}". Topic keys must contain only alphanumeric characters (a-z, A-Z, 0-9), hyphens (-), underscores (_), colons (:), or be a valid email address.`
+    );
+  }
+
+  private isDuplicateKeyError(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code: number }).code === ErrorCodesEnum.DUPLICATE_KEY
     );
   }
 
@@ -331,7 +417,8 @@ export class CreateSubscriptionsUsecase {
   private buildSubscriptionEntity(
     topic: TopicEntity,
     subscribers: SubscriberEntity[],
-    subscriptions: Array<{ identifier?: string; subscriberId: string; name?: string }>
+    subscriptions: Array<{ identifier?: string; subscriberId: string; name?: string }>,
+    contextKeys?: string[]
   ): CreateTopicSubscribersEntity[] {
     return subscribers.map((subscriber) => {
       const subscription = subscriptions.find((sub) => sub.subscriberId === subscriber.subscriberId);
@@ -342,8 +429,11 @@ export class CreateSubscriptionsUsecase {
         _topicId: topic._id,
         topicKey: topic.key,
         externalSubscriberId: subscriber.subscriberId,
-        identifier: subscription?.identifier || buildDefaultSubscriptionIdentifier(topic.key, subscriber.subscriberId),
+        identifier:
+          subscription?.identifier ||
+          buildDefaultSubscriptionIdentifier(topic.key, subscriber.subscriberId, contextKeys),
         name: subscription?.name,
+        contextKeys: contextKeys,
       };
     });
   }
@@ -351,11 +441,16 @@ export class CreateSubscriptionsUsecase {
   private async fetchPreferencesForSubscription(
     command: CreateSubscriptionsCommand,
     subscription: TopicSubscribersEntity,
-    workflows: NotificationTemplateEntity[]
+    workflows: NotificationTemplateEntity[],
+    useContextFiltering: boolean
   ): Promise<SubscriptionPreferenceDto[] | undefined> {
     if (!command.preferences || command.preferences.length === 0 || workflows.length === 0) {
       return undefined;
     }
+
+    const contextQuery = this.preferencesRepository.buildContextExactMatchQuery(subscription.contextKeys, {
+      enabled: useContextFiltering,
+    });
 
     const preferencesEntities = await this.preferencesRepository.find({
       _environmentId: command.environmentId,
@@ -364,6 +459,7 @@ export class CreateSubscriptionsUsecase {
       _subscriberId: subscription._subscriberId,
       _templateId: { $in: workflows.map((w) => w._id) },
       type: PreferencesTypeEnum.SUBSCRIPTION_SUBSCRIBER_WORKFLOW,
+      ...contextQuery,
     });
 
     if (preferencesEntities.length === 0) {
@@ -394,7 +490,11 @@ export class CreateSubscriptionsUsecase {
             : undefined,
           subscriptionId:
             subscription.identifier ||
-            buildDefaultSubscriptionIdentifier(subscription.topicKey, subscription.externalSubscriberId),
+            buildDefaultSubscriptionIdentifier(
+              subscription.topicKey,
+              subscription.externalSubscriberId,
+              subscription.contextKeys
+            ),
           enabled: preferences?.all?.enabled ?? true,
           condition: preferences?.all?.condition as RulesLogic | undefined,
         };
@@ -405,7 +505,8 @@ export class CreateSubscriptionsUsecase {
   private async createPreferencesForSubscriptionsBatch(
     command: CreateSubscriptionsCommand,
     subscriptions: TopicSubscribersEntity[] = [],
-    workflows: NotificationTemplateEntity[]
+    workflows: NotificationTemplateEntity[],
+    contextKeys?: string[]
   ): Promise<Array<{ subscriptionId: string; preferences: SubscriptionPreferenceDto[] }>> {
     if (!command.preferences || command.preferences.length === 0) {
       return [];
@@ -418,6 +519,7 @@ export class CreateSubscriptionsUsecase {
         userId: command.userId,
         preferences: command.preferences,
         workflows,
+        contextKeys,
       },
       subscriptions
     );
@@ -553,5 +655,33 @@ export class CreateSubscriptionsUsecase {
     }
 
     return { workflowsById, workflowsByIdentifier, missingWorkflowIds };
+  }
+
+  private async resolveContexts(
+    environmentId: string,
+    organizationId: string,
+    context?: ContextPayload
+  ): Promise<string[] | undefined> {
+    const isEnabled = await this.featureFlagsService.getFlag({
+      key: FeatureFlagsKeysEnum.IS_CONTEXT_PREFERENCES_ENABLED,
+      defaultValue: false,
+      organization: { _id: organizationId },
+    });
+
+    if (!isEnabled) {
+      return undefined;
+    }
+
+    if (!context) {
+      return [];
+    }
+
+    const contexts = await this.contextRepository.findOrCreateContextsFromPayload(
+      environmentId,
+      organizationId,
+      context
+    );
+
+    return contexts.map((ctx) => ctx.key);
   }
 }

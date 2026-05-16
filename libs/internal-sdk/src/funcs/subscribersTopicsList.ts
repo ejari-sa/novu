@@ -31,6 +31,8 @@ import { Result } from "../types/fp.js";
  * @remarks
  * Retrieve subscriber's topic subscriptions by its unique key identifier **subscriberId**.
  *     Checkout all available filters in the query section.
+ *
+ * This operation requires either {@link Security.bearerAuth} or {@link Security.secretKey} to be set on the `security` parameter when initializing the SDK.
  */
 export function subscribersTopicsList(
   client: NovuCore,
@@ -99,7 +101,6 @@ async function $do(
       charEncoding: "percent",
     }),
   };
-
   const path = pathToFunc("/v2/subscribers/{subscriberId}/subscriptions")(
     pathParams,
   );
@@ -107,6 +108,7 @@ async function $do(
   const query = encodeFormQuery({
     "after": payload.after,
     "before": payload.before,
+    "contextKeys": payload.contextKeys,
     "includeCursor": payload.includeCursor,
     "key": payload.key,
     "limit": payload.limit,
@@ -124,7 +126,7 @@ async function $do(
   }));
 
   const securityInput = await extractSecurity(client._options.security);
-  const requestSecurity = resolveGlobalSecurity(securityInput);
+  const requestSecurity = resolveGlobalSecurity(securityInput, [1, 0]);
 
   const context = {
     options: client._options,

@@ -6,7 +6,7 @@ import {
   InstrumentUsecase,
   PinoLogger,
 } from '@novu/application-generic';
-import { NotificationTemplateEntity, PreferencesRepository, TopicSubscribersEntity } from '@novu/dal';
+import { ErrorCodesEnum, NotificationTemplateEntity, PreferencesRepository, TopicSubscribersEntity } from '@novu/dal';
 import {
   buildWorkflowPreferences,
   PreferencesTypeEnum,
@@ -48,15 +48,36 @@ export class CreateSubscriptionPreferencesUsecase {
         continue;
       }
 
-      const createdPreference = await this.preferencesRepository.create({
-        _environmentId: command.environmentId,
-        _organizationId: command.organizationId,
-        _subscriberId: command._subscriberId,
-        _templateId: workflow._id,
-        _topicSubscriptionId: command._topicSubscriptionId,
-        type: PreferencesTypeEnum.SUBSCRIPTION_SUBSCRIBER_WORKFLOW,
-        preferences: workflowPreferences,
-      });
+      let createdPreference;
+      try {
+        createdPreference = await this.preferencesRepository.create({
+          _environmentId: command.environmentId,
+          _organizationId: command.organizationId,
+          _subscriberId: command._subscriberId,
+          _templateId: workflow._id,
+          _topicSubscriptionId: command._topicSubscriptionId,
+          type: PreferencesTypeEnum.SUBSCRIPTION_SUBSCRIBER_WORKFLOW,
+          preferences: workflowPreferences,
+          contextKeys: command.contextKeys,
+        });
+      } catch (error) {
+        const isDuplicateKeyError =
+          error && typeof error === 'object' && 'code' in error && error.code === ErrorCodesEnum.DUPLICATE_KEY;
+
+        if (isDuplicateKeyError) {
+          createdPreference = await this.preferencesRepository.findOne({
+            _environmentId: command.environmentId,
+            _subscriberId: command._subscriberId,
+            _templateId: workflow._id,
+            _topicSubscriptionId: command._topicSubscriptionId,
+            type: PreferencesTypeEnum.SUBSCRIPTION_SUBSCRIBER_WORKFLOW,
+          });
+        }
+
+        if (!isDuplicateKeyError || !createdPreference) {
+          throw error;
+        }
+      }
 
       if (createdPreference) {
         preferencesResult.push({
@@ -71,7 +92,7 @@ export class CreateSubscriptionPreferencesUsecase {
           },
           subscriptionId:
             command.subscriptionId ||
-            buildDefaultSubscriptionIdentifier(command.topicKey, command.externalSubscriberId),
+            buildDefaultSubscriptionIdentifier(command.topicKey, command.externalSubscriberId, command.contextKeys),
           enabled: createdPreference.preferences?.all?.enabled ?? true,
           condition: createdPreference.preferences?.all?.condition as RulesLogic | undefined,
         });
@@ -148,6 +169,7 @@ export class CreateSubscriptionPreferencesUsecase {
       _topicSubscriptionId: string;
       type: PreferencesTypeEnum;
       preferences: WorkflowPreferences;
+      contextKeys?: string[];
       subscriptionId: string;
       workflow: NotificationTemplateEntity;
     }>
@@ -160,6 +182,7 @@ export class CreateSubscriptionPreferencesUsecase {
       _topicSubscriptionId: string;
       type: PreferencesTypeEnum;
       preferences: WorkflowPreferences;
+      contextKeys?: string[];
       subscriptionId: string;
       workflow: NotificationTemplateEntity;
     }> = [];
@@ -181,9 +204,14 @@ export class CreateSubscriptionPreferencesUsecase {
             _topicSubscriptionId: subscription._id.toString(),
             type: PreferencesTypeEnum.SUBSCRIPTION_SUBSCRIBER_WORKFLOW,
             preferences: workflowPreferences,
+            contextKeys: command.contextKeys,
             subscriptionId:
               subscription.identifier ||
-              buildDefaultSubscriptionIdentifier(subscription.topicKey, subscription.externalSubscriberId),
+              buildDefaultSubscriptionIdentifier(
+                subscription.topicKey,
+                subscription.externalSubscriberId,
+                subscription.contextKeys
+              ),
             workflow,
           });
         }

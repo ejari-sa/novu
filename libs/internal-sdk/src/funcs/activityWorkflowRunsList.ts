@@ -30,6 +30,8 @@ import { Result } from "../types/fp.js";
  *
  * @remarks
  * Retrieve a list of workflow runs with optional filtering and pagination.
+ *
+ * This operation requires {@link Security.bearerAuth} to be set on the `security` parameter when initializing the SDK.
  */
 export function activityWorkflowRunsList(
   client: NovuCore,
@@ -101,6 +103,7 @@ async function $do(
     "severity": payload.severity,
     "statuses": payload.statuses,
     "subscriberIds": payload.subscriberIds,
+    "subscriptionId": payload.subscriptionId,
     "topicKey": payload.topicKey,
     "transactionIds": payload.transactionIds,
     "workflowIds": payload.workflowIds,
@@ -116,7 +119,7 @@ async function $do(
   }));
 
   const securityInput = await extractSecurity(client._options.security);
-  const requestSecurity = resolveGlobalSecurity(securityInput);
+  const requestSecurity = resolveGlobalSecurity(securityInput, [1]);
 
   const context = {
     options: client._options,

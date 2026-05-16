@@ -30,7 +30,7 @@ import { EvaluateApiRateLimit, EvaluateApiRateLimitCommand } from '../usecases/e
 import { ThrottlerCategory, ThrottlerCost } from './throttler.decorator';
 
 export const THROTTLED_EXCEPTION_MESSAGE = 'API rate limit exceeded';
-export const ALLOWED_AUTH_SCHEMES = [ApiAuthSchemeEnum.API_KEY, ApiAuthSchemeEnum.KEYLESS];
+const ALLOWED_AUTH_SCHEMES = [ApiAuthSchemeEnum.API_KEY, ApiAuthSchemeEnum.KEYLESS];
 
 const defaultApiRateLimitCategory = ApiRateLimitCategoryEnum.GLOBAL;
 const defaultApiRateLimitCost = ApiRateLimitCostEnum.SINGLE;
@@ -75,13 +75,18 @@ export class ApiRateLimitInterceptor extends ThrottlerGuard implements NestInter
     const isAllowedRoute = this.isAllowedRoute(context);
 
     if (!isAllowedAuthScheme && !isAllowedEnvironment && !isAllowedRoute) {
-      this.logger.debug({
-        message: 'Rate limiting skipped - request criteria not met',
-        _event: {
-          path: req.path,
-          authScheme: req.authScheme,
+      this.logger.debug(
+        {
+          _nv: {
+            isAllowedAuthScheme,
+            isAllowedEnvironment,
+            isAllowedRoute,
+            path: req.path,
+            authScheme: req.authScheme,
+          },
         },
-      });
+        'Rate limiting skipped - request criteria not met'
+      );
 
       return true;
     }

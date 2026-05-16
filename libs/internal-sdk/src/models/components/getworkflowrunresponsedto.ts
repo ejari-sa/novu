@@ -8,6 +8,10 @@ import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { StepRunDto, StepRunDto$inboundSchema } from "./steprundto.js";
+import {
+  TopicResponseDto,
+  TopicResponseDto$inboundSchema,
+} from "./topicresponsedto.js";
 
 /**
  * Workflow run status
@@ -131,6 +135,10 @@ export type GetWorkflowRunResponseDto = {
    */
   contextKeys?: Array<string> | undefined;
   /**
+   * Topics
+   */
+  topics?: Array<TopicResponseDto> | undefined;
+  /**
    * Step runs
    */
   steps: Array<StepRunDto>;
@@ -138,6 +146,10 @@ export type GetWorkflowRunResponseDto = {
    * Trigger payload
    */
   payload: Payload;
+  /**
+   * Trigger overrides passed to the original workflow trigger
+   */
+  overrides?: { [k: string]: any } | undefined;
 };
 
 /** @internal */
@@ -192,8 +204,10 @@ export const GetWorkflowRunResponseDto$inboundSchema: z.ZodType<
   severity: GetWorkflowRunResponseDtoSeverity$inboundSchema,
   critical: z.boolean(),
   contextKeys: z.array(z.string()).optional(),
+  topics: z.array(TopicResponseDto$inboundSchema).optional(),
   steps: z.array(StepRunDto$inboundSchema),
   payload: z.lazy(() => Payload$inboundSchema),
+  overrides: z.record(z.any()).optional(),
 });
 
 export function getWorkflowRunResponseDtoFromJSON(

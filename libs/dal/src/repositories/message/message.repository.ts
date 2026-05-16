@@ -1,10 +1,12 @@
 import {
   ActorTypeEnum,
   ButtonTypeEnum,
+  buildTagsQuery,
   ChannelTypeEnum,
   MessageActionStatusEnum,
   MessagesStatusEnum,
   SeverityLevelEnum,
+  type TagsMongoFragment,
 } from '@novu/shared';
 import { FilterQuery, ProjectionType, Types } from 'mongoose';
 
@@ -56,10 +58,42 @@ const getFlatObject = (obj: object) => {
   return Object.fromEntries(getEntries(obj, '', 0, MAX_PAYLOAD_QUERY_DEPTH));
 };
 
+function mergeTagsMongoFragment<MessageQueryT extends MessageQuery & EnforceEnvId>(
+  query: MessageQueryT,
+  fragment: TagsMongoFragment
+): MessageQueryT {
+  if (!fragment || Object.keys(fragment).length === 0) {
+    return query;
+  }
+
+  if ('tags' in fragment && fragment.tags) {
+    return { ...query, tags: fragment.tags };
+  }
+
+  if ('$and' in fragment && fragment.$and) {
+    return {
+      ...query,
+      $and: [...(query.$and ?? []), ...fragment.$and],
+    };
+  }
+
+  return query;
+}
+
 export class MessageRepository extends BaseRepository<MessageDBModel, MessageEntity, EnforceEnvId> {
+  private static readonly BATCH_SIZE = 100;
   private feedRepository = new FeedRepository();
   constructor() {
     super(Message, MessageEntity);
+  }
+
+  private chunkArray<T>(array: T[], size: number = MessageRepository.BATCH_SIZE): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < array.length; i += size) {
+      chunks.push(array.slice(i, i + size));
+    }
+
+    return chunks;
   }
 
   async findOne(
@@ -76,13 +110,38 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
     return super.findOne(transformedQuery, select, options);
   }
 
+  async findOneForInbox(
+    query: FilterQuery<MessageDBModel> & EnforceEnvId,
+    select?: ProjectionType<MessageEntity>,
+    options: {
+      readPreference?: 'secondaryPreferred' | 'primary';
+      query?: any;
+      session?: any;
+    } = {}
+  ): Promise<MessageEntity | null> {
+    const transformedQuery = this.transformContextKeysQuery(query) as FilterQuery<MessageDBModel> & EnforceEnvId;
+
+    return super.findOne(transformedQuery, select, {
+      ...options,
+      enhanceQuery: (queryBuilder) =>
+        queryBuilder.populate('subscriber', '_id firstName lastName avatar subscriberId').populate({
+          path: 'template',
+          select: '_id name tags data critical triggers severity',
+          options: {
+            withDeleted: true,
+          },
+        }),
+    });
+  }
+
   private async getFilterQueryForMessage(
     environmentId: string,
     subscriberId: string,
     channel: ChannelTypeEnum,
     query: {
       feedId?: string[];
-      tags?: string[];
+      /** Normalized CNF: AND of OR-groups; omit or empty = no tag filter */
+      tagGroups?: string[][];
       seen?: boolean;
       read?: boolean;
       archived?: boolean;
@@ -134,8 +193,8 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
       requestQuery.read = { $in: [true, false] };
     }
 
-    if (query.tags && query.tags?.length > 0) {
-      requestQuery.tags = { $in: query.tags };
+    if (query.tagGroups && query.tagGroups.length > 0) {
+      requestQuery = mergeTagsMongoFragment(requestQuery, buildTagsQuery(query.tagGroups));
     }
 
     if (query.archived != null) {
@@ -236,7 +295,7 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
       environmentId,
       channel,
       subscriberId,
-      tags,
+      tagGroups,
       read,
       archived,
       snoozed,
@@ -244,11 +303,13 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
       data,
       severity: severityArray,
       contextKeys,
+      createdGte,
+      createdLte,
     }: {
       environmentId: string;
       subscriberId: string;
       channel: ChannelTypeEnum;
-      tags?: string[];
+      tagGroups?: string[][];
       read?: boolean;
       archived?: boolean;
       snoozed?: boolean;
@@ -256,6 +317,8 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
       data?: Record<string, unknown>;
       severity?: SeverityLevelEnum[];
       contextKeys?: string[];
+      createdGte?: Date;
+      createdLte?: Date;
     },
     options: { limit: number; offset: number; after?: string }
   ) {
@@ -280,8 +343,8 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
       query.$and = [...(query.$and ?? []), contextQuery];
     }
 
-    if (tags && tags?.length > 0) {
-      query.tags = { $in: tags };
+    if (tagGroups && tagGroups.length > 0) {
+      query = mergeTagsMongoFragment(query, buildTagsQuery(tagGroups));
     }
 
     if (typeof read === 'boolean') {
@@ -329,6 +392,17 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
       };
     }
 
+    if (createdGte || createdLte) {
+      const createdAtFilter: { $gte?: Date; $lte?: Date } = {};
+      if (createdGte) {
+        createdAtFilter.$gte = createdGte;
+      }
+      if (createdLte) {
+        createdAtFilter.$lte = createdLte;
+      }
+      query.createdAt = createdAtFilter;
+    }
+
     return await this.cursorPagination({
       query,
       limit: options.limit,
@@ -357,7 +431,7 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
     channel: ChannelTypeEnum,
     query: {
       feedId?: string[];
-      tags?: string[];
+      tagGroups?: string[][];
       seen?: boolean;
       read?: boolean;
       archived?: boolean;
@@ -380,7 +454,7 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
       {
         feedId: query.feedId,
         seen: query.seen,
-        tags: query.tags,
+        tagGroups: query.tagGroups,
         read: query.read,
         archived: query.archived,
         payload: query.payload,
@@ -544,14 +618,18 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
     // Extract IDs for targeted update
     const documentIds = documentsToUpdate.map((doc) => doc._id);
 
-    // Perform the update using document IDs
-    await this.update(
-      {
-        _id: { $in: documentIds },
-        _environmentId: environmentId,
-      },
-      { $set: updatePayload }
-    );
+    // Perform the update using document IDs in batches
+    const chunks = this.chunkArray(documentIds);
+
+    for (const chunk of chunks) {
+      await this.update(
+        {
+          _id: { $in: chunk },
+          _environmentId: environmentId,
+        },
+        { $set: updatePayload }
+      );
+    }
 
     // Fetch and return the updated documents
     return this.find({
@@ -607,21 +685,22 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
     markAs: MessagesStatusEnum;
   }): Promise<MessageEntity[]> {
     const updatePayload = this.getReadSeenUpdatePayload(markAs);
+    const chunks = this.chunkArray(messageIds);
 
-    await this.update(
-      {
-        _environmentId: environmentId,
-        _subscriberId: subscriberId,
-        _id: {
-          $in: messageIds.map((id) => {
-            return new Types.ObjectId(id);
-          }),
+    for (const chunk of chunks) {
+      await this.update(
+        {
+          _environmentId: environmentId,
+          _subscriberId: subscriberId,
+          _id: {
+            $in: chunk.map((id) => new Types.ObjectId(id)),
+          },
         },
-      },
-      {
-        $set: updatePayload,
-      }
-    );
+        {
+          $set: updatePayload,
+        }
+      );
+    }
 
     return this.find({
       _environmentId: environmentId,
@@ -651,20 +730,22 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
       requestQuery.lastReadDate = new Date();
     }
 
-    await this.update(
-      {
-        _environmentId: environmentId,
-        _subscriberId: subscriberId,
-        _id: {
-          $in: messageIds.map((id) => {
-            return new Types.ObjectId(id);
-          }),
+    const chunks = this.chunkArray(messageIds);
+
+    for (const chunk of chunks) {
+      await this.update(
+        {
+          _environmentId: environmentId,
+          _subscriberId: subscriberId,
+          _id: {
+            $in: chunk.map((id) => new Types.ObjectId(id)),
+          },
         },
-      },
-      {
-        $set: requestQuery,
-      }
-    );
+        {
+          $set: requestQuery,
+        }
+      );
+    }
   }
 
   async updateMessagesStatusByIds({
@@ -717,7 +798,7 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
     subscriberId: string;
     contextKeys?: string[];
     from: {
-      tags?: string[];
+      tagGroups?: string[][];
       data?: Record<string, unknown>;
       seen?: boolean;
       read?: boolean;
@@ -734,13 +815,16 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
     const isFromArchived = from.archived !== undefined;
     const flatData = from.data ? getFlatObject({ data: from.data }) : {};
 
-    const query: MessageQuery & EnforceEnvId = {
+    let query: MessageQuery & EnforceEnvId = {
       ...flatData,
       _environmentId: environmentId,
       _subscriberId: subscriberId,
-      ...(from.tags && from.tags?.length > 0 && { tags: { $in: from.tags } }),
       ...(contextKeys && contextKeys?.length > 0 && { contextKeys: { $in: contextKeys } }),
     };
+
+    if (from.tagGroups && from.tagGroups.length > 0) {
+      query = mergeTagsMongoFragment(query, buildTagsQuery(from.tagGroups));
+    }
 
     if (isFromArchived) {
       if (!from.archived) {
@@ -850,32 +934,22 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
     // Handle firstSeenDate logic separately for operations that mark as seen
     const shouldMarkAsSeen = isUpdatingArchived || isUpdatingRead || (isUpdatingSeen && seen) || isUpdatingSnoozed;
 
-    if (shouldMarkAsSeen) {
-      // First, update all matching documents with the main update
-      await this.update(
-        idQuery,
-        { $set: updatePayload },
-        {
-          writeConcern: { w: 1 },
-        }
-      );
+    // Batch the updates
+    const chunks = this.chunkArray(documentIds);
 
-      // Then, set firstSeenDate only for documents that don't already have it
-      await this.update(
-        {
-          ...idQuery,
-          firstSeenDate: { $exists: false },
-        },
-        {
-          $set: { firstSeenDate: new Date() },
-        },
-        {
-          writeConcern: { w: 1 },
-        }
-      );
-    } else {
-      // For non-seen operations, just do the regular update
-      await this.update(idQuery, { $set: updatePayload });
+    for (const chunk of chunks) {
+      const chunkQuery = { _id: { $in: chunk }, _environmentId: query._environmentId };
+
+      if (shouldMarkAsSeen) {
+        await this.update(chunkQuery, { $set: updatePayload }, { writeConcern: { w: 1 } });
+        await this.update(
+          { ...chunkQuery, firstSeenDate: { $exists: false } },
+          { $set: { firstSeenDate: new Date() } },
+          { writeConcern: { w: 1 } }
+        );
+      } else {
+        await this.update(chunkQuery, { $set: updatePayload });
+      }
     }
 
     return this.find(idQuery, undefined, { limit: 100 });
@@ -1037,7 +1111,26 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
         '_id firstName lastName avatar subscriberId createdAt updatedAt _organizationId _environmentId deleted'
       );
 
-    return this.mapEntities(data);
+    const entities = this.mapEntities(data);
+
+    return this.normalizeDeviceTokens(entities);
+  }
+
+  /**
+   * Legacy Mongoose schema defined deviceTokens as [Schema.Types.Array] instead of [Schema.Types.String],
+   * causing tokens to be stored as nested arrays (e.g. [["token1"]] instead of ["token1"]).
+   * This normalizes existing corrupted data so the API returns a flat string array matching the Zod schema.
+   */
+  private normalizeDeviceTokens(messages: MessageEntity[]): MessageEntity[] {
+    for (const message of messages) {
+      if (Array.isArray(message.deviceTokens)) {
+        message.deviceTokens = message.deviceTokens
+          .flat(Infinity)
+          .filter((token): token is string => typeof token === 'string');
+      }
+    }
+
+    return messages;
   }
 
   async deleteMessagesByIds({
@@ -1049,23 +1142,24 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
     subscriberId: string;
     ids: string[];
   }): Promise<MessageEntity[]> {
-    const query: MessageQuery & EnforceEnvId = {
-      _environmentId: environmentId,
-      _subscriberId: subscriberId,
-      _id: {
-        $in: ids.map((id) => {
-          return new Types.ObjectId(id);
-        }),
-      },
-    };
+    const chunks = this.chunkArray(ids);
+    const allDeletedMessages: MessageEntity[] = [];
 
-    // First, retrieve the messages that will be deleted for webhook events
-    const messagesToDelete = await this.find(query);
+    for (const chunk of chunks) {
+      const query: MessageQuery & EnforceEnvId = {
+        _environmentId: environmentId,
+        _subscriberId: subscriberId,
+        _id: {
+          $in: chunk.map((id) => new Types.ObjectId(id)),
+        },
+      };
 
-    // Then delete them
-    await this.delete(query);
+      const messagesToDelete = await this.find(query);
+      await this.delete(query);
+      allDeletedMessages.push(...messagesToDelete);
+    }
 
-    return messagesToDelete;
+    return allDeletedMessages;
   }
 
   async deleteMessagesWithFilters({
@@ -1077,7 +1171,7 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
     environmentId: string;
     subscriberId: string;
     filters: {
-      tags?: string[];
+      tagGroups?: string[][];
       data?: Record<string, unknown>;
       read?: boolean;
       archived?: boolean;
@@ -1086,13 +1180,16 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
   }): Promise<MessageEntity[]> {
     const flatData = filters.data ? getFlatObject({ data: filters.data }) : {};
 
-    const query: MessageQuery & EnforceEnvId = {
+    let query: MessageQuery & EnforceEnvId = {
       ...flatData,
       _environmentId: environmentId,
       _subscriberId: subscriberId,
-      ...(filters.tags && filters.tags?.length > 0 && { tags: { $in: filters.tags } }),
       ...(contextKeys && contextKeys?.length > 0 && { contextKeys: { $in: contextKeys } }),
     };
+
+    if (filters.tagGroups && filters.tagGroups.length > 0) {
+      query = mergeTagsMongoFragment(query, buildTagsQuery(filters.tagGroups));
+    }
 
     const isReadFiltered = filters.read !== undefined;
     const isArchivedFiltered = filters.archived !== undefined;
@@ -1136,20 +1233,6 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
     return {
       ...restQuery,
       ...this.buildContextExactMatchQuery(contextKeys),
-    };
-  }
-
-  private buildContextExactMatchQuery(contextKeys: string[]): MessageQuery {
-    // empty array = inbox has no (default) context, only match messages with no context
-    if (contextKeys.length === 0) {
-      return {
-        $or: [{ contextKeys: { $exists: false } }, { contextKeys: [] }],
-      };
-    }
-
-    // non-empty array = exact match filtering
-    return {
-      contextKeys: { $all: contextKeys, $size: contextKeys.length },
     };
   }
 }

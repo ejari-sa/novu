@@ -11,6 +11,7 @@ import {
   Query,
   Res,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiExcludeController } from '@nestjs/swagger';
@@ -29,6 +30,7 @@ import { GetSubscriptionCommand } from '../subscriptions/usecases/get-subscripti
 import { GetSubscription } from '../subscriptions/usecases/get-subscription/get-subscription.usecase';
 import { UpdateSubscriptionCommand, UpdateSubscriptionUsecase } from '../subscriptions/usecases/update-subscription';
 import { CreateTopicSubscriptionRequestDto } from './dtos/create-topic-subscription-request.dto';
+import { ContextCompatibilityInterceptor } from './interceptors/context-compatibility.interceptor';
 import { DeleteTopicSubscriptionCommand } from './usecases/delete-subscription/delete-subscription.command';
 import { DeleteTopicSubscription } from './usecases/delete-subscription/delete-subscription.usecase';
 import { GetTopicSubscriptionsCommand } from './usecases/get-topic-subscriptions/get-topic-subscriptions.command';
@@ -38,6 +40,7 @@ import { GetTopicSubscriptions } from './usecases/get-topic-subscriptions/get-to
 @Controller('/inbox')
 @ApiExcludeController()
 @ExcludeFromIdempotency()
+@UseInterceptors(ContextCompatibilityInterceptor)
 export class InboxTopicController {
   constructor(
     private getTopicSubscriptionsUsecase: GetTopicSubscriptions,
@@ -60,6 +63,7 @@ export class InboxTopicController {
         subscriberId: subscriberSession.subscriberId,
         topicKey,
         _subscriberId: subscriberSession._id,
+        contextKeys: subscriberSession.contextKeys,
       })
     );
   }
@@ -85,6 +89,7 @@ export class InboxTopicController {
         identifier,
         workflowIds: normalizedWorkflowIds,
         tags: normalizedTags,
+        contextKeys: subscriberSession.contextKeys,
       })
     );
 
@@ -119,6 +124,7 @@ export class InboxTopicController {
         ],
         name: body.topic?.name,
         preferences: body.preferences ? this.convertPreferencesToGroupFilters(body.preferences) : undefined,
+        contextKeys: subscriberSession.contextKeys,
       })
     );
 
@@ -157,6 +163,7 @@ export class InboxTopicController {
         identifier,
         name: body.name,
         preferences: body.preferences ? this.convertPreferencesToGroupFilters(body.preferences) : undefined,
+        contextKeys: subscriberSession.contextKeys,
       })
     );
 
@@ -183,6 +190,7 @@ export class InboxTopicController {
         topicKey,
         identifier,
         _subscriberId: subscriberSession._id,
+        contextKeys: subscriberSession.contextKeys,
       })
     );
   }

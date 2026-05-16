@@ -1,16 +1,16 @@
-import { Body, Controller, Delete, Param, Post, Req, Scope } from '@nestjs/common';
+import { Body, Controller, Delete, Param, Post, Req, Scope, ServiceUnavailableException } from '@nestjs/common';
 import { ApiExcludeEndpoint, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { RequirePermissions, ResourceCategory } from '@novu/application-generic';
+import { FeatureFlagsService, RequirePermissions, ResourceCategory } from '@novu/application-generic';
 import {
   AddressingTypeEnum,
   ApiRateLimitCategoryEnum,
   ApiRateLimitCostEnum,
+  FeatureFlagsKeysEnum,
   PermissionsEnum,
   ResourceEnum,
   TriggerRequestCategoryEnum,
   UserSessionData,
 } from '@novu/shared';
-import { v4 as uuidv4 } from 'uuid';
 import { PayloadValidationExceptionDto } from '../../error-dto';
 import { RequireAuthentication } from '../auth/framework/auth.decorator';
 import { ExternalApiAccessible } from '../auth/framework/external-api.decorator';
@@ -64,8 +64,23 @@ export class EventsController {
     private triggerEventToAll: TriggerEventToAll,
     private sendTestEmail: SendTestEmail,
     private parseEventRequest: ParseEventRequest,
-    private processBulkTriggerUsecase: ProcessBulkTrigger
+    private processBulkTriggerUsecase: ProcessBulkTrigger,
+    private featureFlagsService: FeatureFlagsService
   ) {}
+
+  private async checkKillSwitch(user: UserSessionData): Promise<void> {
+    const isKillSwitchEnabled = await this.featureFlagsService.getFlag({
+      key: FeatureFlagsKeysEnum.IS_ORG_KILLSWITCH_FLAG_ENABLED,
+      defaultValue: false,
+      organization: { _id: user.organizationId },
+      environment: { _id: user.environmentId },
+      component: 'trigger',
+    });
+
+    if (isKillSwitchEnabled) {
+      throw new ServiceUnavailableException('Service temporarily unavailable for this organization');
+    }
+  }
 
   @KeylessAccessible()
   @ExternalApiAccessible()
@@ -91,6 +106,8 @@ export class EventsController {
     @Req() req: RequestWithReqId,
     @Body() body: TriggerEventRequestDto
   ): Promise<TriggerEventResponseDto> {
+    await this.checkKillSwitch(user);
+
     const result = await this.parseEventRequest.execute(
       ParseEventRequestMulticastCommand.create({
         userId: user._id,
@@ -140,6 +157,8 @@ export class EventsController {
     @Body() body: BulkTriggerEventDto,
     @Req() req: RequestWithReqId
   ): Promise<TriggerEventResponseDto[]> {
+    await this.checkKillSwitch(user);
+
     return this.processBulkTriggerUsecase.execute(
       ProcessBulkTriggerCommand.create({
         userId: user._id,
@@ -178,7 +197,7 @@ export class EventsController {
     @Body() body: TriggerEventToAllRequestDto,
     @Req() req: RequestWithReqId
   ): Promise<TriggerEventResponseDto> {
-    const transactionId = body.transactionId || uuidv4();
+    await this.checkKillSwitch(user);
 
     return this.triggerEventToAll.execute(
       TriggerEventToAllCommand.create({
@@ -188,7 +207,7 @@ export class EventsController {
         identifier: body.name,
         payload: body.payload,
         tenant: body.tenant,
-        transactionId,
+        transactionId: body.transactionId,
         overrides: body.overrides || {},
         actor: body.actor,
         context: body.context,

@@ -18,9 +18,11 @@ import { addBreadcrumb } from '@sentry/node';
 import { toMerged } from 'es-toolkit';
 import { Instrument, InstrumentUsecase } from '../../instrumentation';
 import { PinoLogger } from '../../logging';
-import type { EventType, Trace } from '../../services/analytic-logs';
+import type { EventType, RequestTraceInput } from '../../services/analytic-logs';
 import { LogRepository, mapEventTypeToTitle, TraceLogRepository } from '../../services/analytic-logs';
 import { AnalyticsService } from '../../services/analytics.service';
+import { FeatureFlagsService } from '../../services/feature-flags';
+import { InMemoryLRUCacheService, InMemoryLRUCacheStore } from '../../services/in-memory-lru-cache';
 import { CreateOrUpdateSubscriberCommand, CreateOrUpdateSubscriberUseCase } from '../create-or-update-subscriber';
 import { ProcessTenant, ProcessTenantCommand } from '../process-tenant';
 import { TriggerBroadcastCommand } from '../trigger-broadcast/trigger-broadcast.command';
@@ -46,7 +48,9 @@ export class TriggerEvent {
     private analyticsService: AnalyticsService,
     private traceLogRepository: TraceLogRepository,
     private contextRepository: ContextRepository,
-    private verifyPayload: VerifyPayload
+    private verifyPayload: VerifyPayload,
+    private featureFlagsService: FeatureFlagsService,
+    private inMemoryLRUCacheService: InMemoryLRUCacheService
   ) {
     this.logger.setContext(this.constructor.name);
   }
@@ -151,7 +155,7 @@ export class TriggerEvent {
       // We might have a single actor for every trigger, so we only need to check for it once
       let actorProcessed: SubscriberEntity | undefined;
       if (mappedCommand.actor) {
-        this.logger.info(mappedCommand, 'Processing actor');
+        this.logger.debug(mappedCommand, 'Processing actor');
 
         try {
           actorProcessed = await this.createOrUpdateSubscriberUsecase.execute(
@@ -205,6 +209,8 @@ export class TriggerEvent {
       }
     } catch (e) {
       const error = e as Error;
+      const isBadRequest = e instanceof BadRequestException;
+
       await this.createWorkflowTrace({
         command,
         eventType: 'workflow_execution_failed',
@@ -214,16 +220,19 @@ export class TriggerEvent {
         workflowId: storedWorkflow?._id,
       });
 
-      Logger.error(
-        {
-          transactionId: command.transactionId,
-          organization: command.organizationId,
-          triggerIdentifier: command.identifier,
-          userId: command.userId,
-          error: e,
-        },
-        'Unexpected error has occurred when triggering event'
-      );
+      const logPayload = {
+        transactionId: command.transactionId,
+        organization: command.organizationId,
+        triggerIdentifier: command.identifier,
+        userId: command.userId,
+        error: e,
+      };
+
+      if (isBadRequest) {
+        Logger.debug(logPayload, 'Bad request when triggering event');
+      } else {
+        Logger.error(logPayload, 'Unexpected error has occurred when triggering event');
+      }
 
       throw e;
     }
@@ -243,7 +252,7 @@ export class TriggerEvent {
     eventType: EventType;
     status?: 'success' | 'error' | 'warning';
     message?: string;
-    rawData?: any;
+    rawData?: unknown;
     workflowId?: string;
   }): Promise<void> {
     const { command, eventType, status = 'success', message, rawData, workflowId } = params;
@@ -253,22 +262,22 @@ export class TriggerEvent {
     }
 
     try {
-      const traceData: Omit<Trace, 'id' | 'expires_at'> = {
+      const traceData: RequestTraceInput = {
         created_at: LogRepository.formatDateTime64(new Date()),
         organization_id: command.organizationId,
         environment_id: command.environmentId,
         user_id: command.userId,
-        subscriber_id: null,
-        external_subscriber_id: null,
+        subscriber_id: '',
+        external_subscriber_id: '',
         event_type: eventType,
         title: mapEventTypeToTitle(eventType),
-        message: message || null,
-        raw_data: rawData ? JSON.stringify(rawData) : null,
+        message: message || '',
+        raw_data: rawData ? JSON.stringify(rawData) : '',
         status,
-        entity_type: 'request',
         entity_id: command.requestId,
         workflow_run_identifier: command.identifier,
         workflow_id: workflowId || '',
+        provider_id: '',
       };
 
       await this.traceLogRepository.createRequest([traceData]);
@@ -316,9 +325,11 @@ export class TriggerEvent {
   }) {
     const lastTriggeredAt = new Date();
 
-    const workflow = await this.notificationTemplateRepository.findByTriggerIdentifier(
+    const workflow = await this.findWorkflowByTriggerIdentifier(
+      command.triggerIdentifier,
       command.environmentId,
-      command.triggerIdentifier
+      command.organizationId,
+      command.payload?.__source
     );
 
     if (workflow) {
@@ -354,6 +365,25 @@ export class TriggerEvent {
     }
 
     return workflow;
+  }
+
+  @Instrument()
+  private async findWorkflowByTriggerIdentifier(
+    triggerIdentifier: string,
+    environmentId: string,
+    organizationId: string,
+    source?: string
+  ): Promise<NotificationTemplateEntity | null> {
+    return this.inMemoryLRUCacheService.get(
+      InMemoryLRUCacheStore.WORKFLOW,
+      `${environmentId}:${triggerIdentifier}`,
+      () => this.notificationTemplateRepository.findByTriggerIdentifier(environmentId, triggerIdentifier),
+      {
+        environmentId,
+        organizationId,
+        skipCache: !!source,
+      }
+    );
   }
 
   @Instrument()

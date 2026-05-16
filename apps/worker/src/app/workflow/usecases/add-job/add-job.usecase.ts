@@ -35,7 +35,7 @@ import {
   NotificationRepository,
   NotificationTemplateEntity,
   SubscriberRepository,
-  TopicPreferencesSummary,
+  TopicPreferenceEvaluation,
 } from '@novu/dal';
 import { DelayOutput, DigestOutput, ExecuteOutput } from '@novu/framework/internal';
 import {
@@ -121,7 +121,11 @@ export class AddJob {
       };
     }
 
-    this.logger.info(`Scheduling New Job ${job._id} of type: ${job.type}`);
+    if (job.type === StepTypeEnum.TRIGGER) {
+      this.logger.debug(`Scheduling New Job ${job._id} of type: ${job.type}`);
+    } else {
+      this.logger.info(`Scheduling New Job ${job._id} of type: ${job.type}`);
+    }
 
     const notification =
       command.notification ??
@@ -169,7 +173,7 @@ export class AddJob {
   }
 
   private formatTopicsContextForExecution(
-    topics: Array<{ _topicId: string; topicKey: string; preferenceEvaluation?: TopicPreferencesSummary }>
+    topics: Array<{ _topicId: string; topicKey: string; preferenceEvaluation?: TopicPreferenceEvaluation }>
   ) {
     return {
       topics: topics.map((topic) => ({
@@ -383,7 +387,7 @@ export class AddJob {
 
     if (errors.length > 0) {
       const uniqueErrors = _.uniq(errors.map((error) => error.message));
-      this.logger.warn({ errors, jobId: job._id }, uniqueErrors);
+      this.logger.warn({ errors, jobId: job._id }, uniqueErrors?.toString());
 
       await this.createExecutionDetails.execute(
         CreateExecutionDetailsCommand.create({
@@ -505,7 +509,7 @@ export class AddJob {
 
     if (tierValidationErrors && tierValidationErrors.length > 0) {
       const errorMessage = tierValidationErrors[0].message;
-      this.logger.error(`${stepTypeName} duration exceeds tier limits: ${errorMessage}, jobId: ${job._id}`);
+      this.logger.debug(`${stepTypeName} duration exceeds tier limits: ${errorMessage}, jobId: ${job._id}`);
 
       await this.createExecutionDetails.execute(
         CreateExecutionDetailsCommand.create({
@@ -531,7 +535,7 @@ export class AddJob {
     detail: DetailEnum
   ): Promise<AddJobResult> {
     const stepTypeName = stepType.toLowerCase();
-    this.logger.error(`${stepTypeName} validation failed for job ${job._id}: ${error.message}`);
+    this.logger.debug(`${stepTypeName} validation failed for job ${job._id}: ${error.message}`);
 
     await this.createExecutionDetails.execute(
       CreateExecutionDetailsCommand.create({
@@ -1142,10 +1146,24 @@ export class AddJob {
   }
 }
 
-function isJobDeferredType(jobType: StepTypeEnum | undefined) {
+const DEFERRED_JOB_TYPE_MAP: Record<StepTypeEnum, boolean> = {
+  [StepTypeEnum.DELAY]: true,
+  [StepTypeEnum.DIGEST]: true,
+  [StepTypeEnum.THROTTLE]: true,
+  [StepTypeEnum.TRIGGER]: false,
+  [StepTypeEnum.CUSTOM]: false,
+  [StepTypeEnum.HTTP_REQUEST]: false,
+  [StepTypeEnum.IN_APP]: false,
+  [StepTypeEnum.EMAIL]: false,
+  [StepTypeEnum.SMS]: false,
+  [StepTypeEnum.CHAT]: false,
+  [StepTypeEnum.PUSH]: false,
+};
+
+function isJobDeferredType(jobType: StepTypeEnum | undefined): boolean {
   if (!jobType) return false;
 
-  return [StepTypeEnum.DELAY, StepTypeEnum.DIGEST, StepTypeEnum.THROTTLE].includes(jobType);
+  return DEFERRED_JOB_TYPE_MAP[jobType];
 }
 
 function isShouldHaltJobExecution(digestCreationResult: DigestCreationResultEnum) {

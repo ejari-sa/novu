@@ -19,17 +19,13 @@ export type SubscribersPreferencesListQueryData =
 export function prefetchSubscribersPreferencesList(
   queryClient: QueryClient,
   client$: NovuCore,
-  subscriberId: string,
-  criticality?: operations.Criticality | undefined,
-  idempotencyKey?: string | undefined,
+  request: operations.SubscribersControllerGetSubscriberPreferencesRequest,
   options?: RequestOptions,
 ): Promise<void> {
   return queryClient.prefetchQuery({
     ...buildSubscribersPreferencesListQuery(
       client$,
-      subscriberId,
-      criticality,
-      idempotencyKey,
+      request,
       options,
     ),
   });
@@ -37,9 +33,7 @@ export function prefetchSubscribersPreferencesList(
 
 export function buildSubscribersPreferencesListQuery(
   client$: NovuCore,
-  subscriberId: string,
-  criticality?: operations.Criticality | undefined,
-  idempotencyKey?: string | undefined,
+  request: operations.SubscribersControllerGetSubscriberPreferencesRequest,
   options?: RequestOptions,
 ): {
   queryKey: QueryKey;
@@ -48,9 +42,10 @@ export function buildSubscribersPreferencesListQuery(
   ) => Promise<SubscribersPreferencesListQueryData>;
 } {
   return {
-    queryKey: queryKeySubscribersPreferencesList(subscriberId, {
-      criticality,
-      idempotencyKey,
+    queryKey: queryKeySubscribersPreferencesList(request.subscriberId, {
+      criticality: request.criticality,
+      contextKeys: request.contextKeys,
+      idempotencyKey: request.idempotencyKey,
     }),
     queryFn: async function subscribersPreferencesListQueryFn(
       ctx,
@@ -68,9 +63,7 @@ export function buildSubscribersPreferencesListQuery(
 
       return unwrapAsync(subscribersPreferencesList(
         client$,
-        subscriberId,
-        criticality,
-        idempotencyKey,
+        request,
         mergedOptions,
       ));
     },
@@ -81,6 +74,7 @@ export function queryKeySubscribersPreferencesList(
   subscriberId: string,
   parameters: {
     criticality?: operations.Criticality | undefined;
+    contextKeys?: Array<string> | undefined;
     idempotencyKey?: string | undefined;
   },
 ): QueryKey {

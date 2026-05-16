@@ -10,6 +10,17 @@ import {
   useSuspenseQuery,
   UseSuspenseQueryResult,
 } from "@tanstack/react-query";
+import {
+  ConnectionError,
+  InvalidRequestError,
+  RequestAbortedError,
+  RequestTimeoutError,
+  UnexpectedClientError,
+} from "../models/errors/httpclienterrors.js";
+import * as errors from "../models/errors/index.js";
+import { NovuError } from "../models/errors/novuerror.js";
+import { ResponseValidationError } from "../models/errors/responsevalidationerror.js";
+import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import * as operations from "../models/operations/index.js";
 import { useNovuContext } from "./_context.js";
 import {
@@ -30,6 +41,18 @@ export {
   type SubscribersTopicsListQueryData,
 };
 
+export type SubscribersTopicsListQueryError =
+  | errors.ErrorDto
+  | errors.ValidationErrorDto
+  | NovuError
+  | ResponseValidationError
+  | ConnectionError
+  | RequestAbortedError
+  | RequestTimeoutError
+  | InvalidRequestError
+  | UnexpectedClientError
+  | SDKValidationError;
+
 /**
  * Retrieve subscriber subscriptions
  *
@@ -39,8 +62,14 @@ export {
  */
 export function useSubscribersTopicsList(
   request: operations.SubscribersControllerListSubscriberTopicsRequest,
-  options?: QueryHookOptions<SubscribersTopicsListQueryData>,
-): UseQueryResult<SubscribersTopicsListQueryData, Error> {
+  options?: QueryHookOptions<
+    SubscribersTopicsListQueryData,
+    SubscribersTopicsListQueryError
+  >,
+): UseQueryResult<
+  SubscribersTopicsListQueryData,
+  SubscribersTopicsListQueryError
+> {
   const client = useNovuContext();
   return useQuery({
     ...buildSubscribersTopicsListQuery(
@@ -61,8 +90,14 @@ export function useSubscribersTopicsList(
  */
 export function useSubscribersTopicsListSuspense(
   request: operations.SubscribersControllerListSubscriberTopicsRequest,
-  options?: SuspenseQueryHookOptions<SubscribersTopicsListQueryData>,
-): UseSuspenseQueryResult<SubscribersTopicsListQueryData, Error> {
+  options?: SuspenseQueryHookOptions<
+    SubscribersTopicsListQueryData,
+    SubscribersTopicsListQueryError
+  >,
+): UseSuspenseQueryResult<
+  SubscribersTopicsListQueryData,
+  SubscribersTopicsListQueryError
+> {
   const client = useNovuContext();
   return useSuspenseQuery({
     ...buildSubscribersTopicsListQuery(
@@ -88,6 +123,7 @@ export function setSubscribersTopicsListData(
       orderBy?: string | undefined;
       includeCursor?: boolean | undefined;
       key?: string | undefined;
+      contextKeys?: Array<string> | undefined;
       idempotencyKey?: string | undefined;
     },
   ],
@@ -113,6 +149,7 @@ export function invalidateSubscribersTopicsList(
         orderBy?: string | undefined;
         includeCursor?: boolean | undefined;
         key?: string | undefined;
+        contextKeys?: Array<string> | undefined;
         idempotencyKey?: string | undefined;
       },
     ]

@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import {
+  FeatureFlagsService,
   GetPreferences,
   GetSubscriberTemplatePreference,
   GetSubscriberTemplatePreferenceCommand,
@@ -13,7 +14,10 @@ import {
   UpsertSubscriberWorkflowPreferencesCommand,
 } from '@novu/application-generic';
 import {
+  BaseRepository,
+  EnforceEnvOrOrgIds,
   NotificationTemplateEntity,
+  PreferencesDBModel,
   PreferencesRepository,
   SubscriberEntity,
   SubscriberRepository,
@@ -21,6 +25,7 @@ import {
 } from '@novu/dal';
 import {
   buildWorkflowPreferences,
+  FeatureFlagsKeysEnum,
   IPreferenceChannels,
   PreferenceLevelEnum,
   PreferencesTypeEnum,
@@ -31,10 +36,12 @@ import {
   WorkflowPreferences,
   WorkflowPreferencesPartial,
 } from '@novu/shared';
+import { FilterQuery } from 'mongoose';
 import {
   GetSubscriberGlobalPreference,
   GetSubscriberGlobalPreferenceCommand,
 } from '../../../subscribers/usecases/get-subscriber-global-preference';
+import { stripContextFromIdentifier } from '../../../subscriptions/utils/subscriptions';
 import { InboxPreference } from '../../utils/types';
 import { UpdatePreferencesCommand } from './update-preferences.command';
 
@@ -48,7 +55,8 @@ export class UpdatePreferences {
     private getWorkflowByIdsUsecase: GetWorkflowByIdsUseCase,
     private sendWebhookMessage: SendWebhookMessage,
     private topicSubscribersRepository: TopicSubscribersRepository,
-    private preferencesRepository: PreferencesRepository
+    private preferencesRepository: PreferencesRepository,
+    private featureFlagsService: FeatureFlagsService
   ) {}
 
   @InstrumentUsecase()
@@ -72,6 +80,7 @@ export class UpdatePreferences {
       objectType: WebhookObjectTypeEnum.PREFERENCE,
       payload: {
         object: newPreference,
+        subscriberId: command.subscriberId,
       },
       organizationId: command.organizationId,
       environmentId: command.environmentId,
@@ -108,13 +117,46 @@ export class UpdatePreferences {
       return undefined;
     }
 
-    const subscription = await this.topicSubscribersRepository.findOne({
-      _environmentId: command.environmentId,
-      _organizationId: command.organizationId,
-      identifier: command.subscriptionIdentifier,
+    const isContextEnabled = await this.featureFlagsService.getFlag({
+      key: FeatureFlagsKeysEnum.IS_CONTEXT_PREFERENCES_ENABLED,
+      defaultValue: false,
+      organization: { _id: command.organizationId },
     });
 
-    return subscription?._id;
+    let identifier = command.subscriptionIdentifier;
+    if (!isContextEnabled) {
+      identifier = stripContextFromIdentifier(identifier);
+    }
+
+    const useContextFiltering = await this.featureFlagsService.getFlag({
+      key: FeatureFlagsKeysEnum.IS_CONTEXT_PREFERENCES_ENABLED,
+      defaultValue: false,
+      organization: { _id: command.organizationId },
+    });
+
+    const contextQuery = this.topicSubscribersRepository.buildContextExactMatchQuery(command.contextKeys, {
+      enabled: useContextFiltering,
+    });
+
+    // Try to find by identifier first
+    let subscription = await this.topicSubscribersRepository.findOne({
+      _environmentId: command.environmentId,
+      _organizationId: command.organizationId,
+      identifier,
+      ...contextQuery,
+    });
+
+    // If not found by identifier, try by _id (in case subscriptionIdentifier is actually an _id)
+    if (!subscription && BaseRepository.isInternalId(command.subscriptionIdentifier)) {
+      subscription = await this.topicSubscribersRepository.findOne({
+        _environmentId: command.environmentId,
+        _organizationId: command.organizationId,
+        _id: command.subscriptionIdentifier,
+        ...contextQuery,
+      });
+    }
+
+    return subscription?._id?.toString();
   }
 
   @Instrument()
@@ -131,6 +173,7 @@ export class UpdatePreferences {
       organizationId: command.organizationId,
       environmentId: command.environmentId,
       _subscriberId: subscriber._id,
+      contextKeys: command.contextKeys,
       workflowId,
       subscriptionId: internalSubscriptionId,
       schedule: command.schedule,
@@ -161,13 +204,26 @@ export class UpdatePreferences {
       command.workflowIdOrIdentifier &&
       workflow
     ) {
-      const preferenceEntity = await this.preferencesRepository.findOne({
+      const useContextFiltering = await this.featureFlagsService.getFlag({
+        key: FeatureFlagsKeysEnum.IS_CONTEXT_PREFERENCES_ENABLED,
+        defaultValue: false,
+        organization: { _id: command.organizationId },
+      });
+
+      const contextQuery = this.preferencesRepository.buildContextExactMatchQuery(command.contextKeys, {
+        enabled: useContextFiltering,
+      });
+
+      const query: FilterQuery<PreferencesDBModel> & EnforceEnvOrOrgIds = {
         _environmentId: command.environmentId,
         _subscriberId: subscriber._id,
         _templateId: workflow._id,
         _topicSubscriptionId: internalSubscriptionId,
         type: PreferencesTypeEnum.SUBSCRIPTION_SUBSCRIBER_WORKFLOW,
-      });
+        ...contextQuery,
+      };
+
+      const preferenceEntity = await this.preferencesRepository.findOne(query);
 
       const builtPreferences = buildWorkflowPreferences(preferenceEntity?.preferences);
       const channels = GetPreferences.mapWorkflowPreferencesToChannelPreferences(preferenceEntity?.preferences || {});
@@ -176,7 +232,7 @@ export class UpdatePreferences {
         level: PreferenceLevelEnum.TEMPLATE,
         enabled: builtPreferences.all.enabled,
         condition: builtPreferences.all.condition,
-        subscriptionId: internalSubscriptionId,
+        subscriptionId: command.subscriptionIdentifier,
         channels,
         workflow: {
           id: workflow._id,
@@ -199,8 +255,8 @@ export class UpdatePreferences {
           template: workflow,
           subscriber,
           includeInactiveChannels: command.includeInactiveChannels,
-          subscriptionId: internalSubscriptionId,
-        })
+          contextKeys: command.contextKeys,
+        } as GetSubscriberTemplatePreferenceCommand)
       );
 
       return {
@@ -225,6 +281,7 @@ export class UpdatePreferences {
         environmentId: command.environmentId,
         subscriberId: command.subscriberId,
         includeInactiveChannels: command.includeInactiveChannels,
+        contextKeys: command.contextKeys,
       })
     );
 
@@ -240,6 +297,7 @@ export class UpdatePreferences {
     organizationId: string;
     _subscriberId: string;
     environmentId: string;
+    contextKeys?: string[];
     workflowId?: string;
     subscriptionId?: string;
     schedule?: Schedule;
@@ -270,6 +328,7 @@ export class UpdatePreferences {
           templateId: item.workflowId,
           topicSubscriptionId: item.subscriptionId,
           preferences,
+          contextKeys: item.contextKeys,
           returnPreference: false,
         })
       );
@@ -285,6 +344,7 @@ export class UpdatePreferences {
           _subscriberId: item._subscriberId,
           templateId: item.workflowId,
           preferences,
+          contextKeys: item.contextKeys,
           returnPreference: false,
         })
       );
@@ -300,6 +360,7 @@ export class UpdatePreferences {
         _subscriberId: item._subscriberId,
         returnPreference: false,
         schedule: item.schedule,
+        contextKeys: item.contextKeys,
       })
     );
   }

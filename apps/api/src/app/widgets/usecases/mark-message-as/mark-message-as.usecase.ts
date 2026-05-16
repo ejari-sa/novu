@@ -1,7 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   AnalyticsService,
-  buildFeedKey,
   buildMessageCountKey,
   buildSubscriberKey,
   CachedResponse,
@@ -15,7 +14,6 @@ import {
   PinoLogger,
   SendWebhookMessage,
   StepType,
-  Trace,
   WebSocketsQueueService,
 } from '@novu/application-generic';
 import { MessageEntity, MessageRepository, SubscriberEntity, SubscriberRepository } from '@novu/dal';
@@ -131,15 +129,15 @@ export class MarkMessageAs {
           event_type: eventType,
           title: mapEventTypeToTitle(eventType),
           message: `Message ${eventType.replace('message_', '')} for subscriber ${message._subscriberId}`,
-          raw_data: null,
+          raw_data: '',
           status: 'success',
-          entity_type: 'step_run',
           entity_id: message._jobId,
           external_subscriber_id: message._subscriberId,
           step_run_type: message.channel as StepType,
           workflow_run_identifier: '',
           _notificationId: message._notificationId,
           workflow_id: message._templateId,
+          provider_id: '',
         });
       }
     }
@@ -168,6 +166,7 @@ export class MarkMessageAs {
         event: eventMessage,
         userId: subscriber._id,
         _environmentId: subscriber._environmentId,
+        contextKeys: [],
       },
       groupId: subscriber._organizationId,
     });

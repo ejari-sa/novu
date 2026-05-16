@@ -9,14 +9,19 @@ import {
   CreateOrUpdateSubscriberUseCase,
   CreateTenant,
   cacheService,
+  clickHouseBatchService,
   clickHouseService,
   createNestLoggingModuleOptions,
   DalServiceHealthIndicator,
   DigestFilterSteps,
   ExecuteBridgeRequest,
+  ExecuteFrameworkRequest,
+  ExecuteStepResolverRequest,
   featureFlagsService,
   GetDecryptedSecretKey,
   GetTenant,
+  HttpClientService,
+  InMemoryLRUCacheService,
   InvalidateCacheService,
   LoggerModule,
   MetricsModule,
@@ -30,11 +35,13 @@ import {
   UpdateSubscriberChannel,
   UpdateTenant,
   WorkflowRunRepository,
+  WorkflowRunService,
 } from '@novu/application-generic';
 import {
   ControlValuesRepository,
   DalService,
   EnvironmentRepository,
+  EnvironmentVariableRepository,
   ExecutionDetailsRepository,
   IntegrationRepository,
   JobRepository,
@@ -58,6 +65,7 @@ import { ActiveJobsMetricService } from '../workflow/services';
 
 const DAL_MODELS = [
   EnvironmentRepository,
+  EnvironmentVariableRepository,
   ExecutionDetailsRepository,
   NotificationTemplateRepository,
   SubscriberRepository,
@@ -94,6 +102,8 @@ const ANALYTICS_PROVIDERS = [
 
   // Services
   clickHouseService,
+  clickHouseBatchService,
+  WorkflowRunService,
 ];
 
 const PROVIDERS = [
@@ -109,6 +119,7 @@ const PROVIDERS = [
   DalServiceHealthIndicator,
   DigestFilterSteps,
   featureFlagsService,
+  InMemoryLRUCacheService,
   InvalidateCacheService,
   StorageHelperService,
   storageService,
@@ -121,7 +132,10 @@ const PROVIDERS = [
   ...DAL_MODELS,
   ActiveJobsMetricService,
   ExecuteBridgeRequest,
+  ExecuteFrameworkRequest,
+  ExecuteStepResolverRequest,
   GetDecryptedSecretKey,
+  HttpClientService,
   ...ANALYTICS_PROVIDERS,
 ];
 

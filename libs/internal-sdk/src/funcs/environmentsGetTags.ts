@@ -26,10 +26,12 @@ import { APICall, APIPromise } from "../types/async.js";
 import { Result } from "../types/fp.js";
 
 /**
- * Get environment tags
+ * List environment tags
  *
  * @remarks
  * Retrieve all unique tags used in workflows within the specified environment. These tags can be used for filtering workflows.
+ *
+ * This operation requires either {@link Security.bearerAuth} or {@link Security.secretKey} to be set on the `security` parameter when initializing the SDK.
  */
 export function environmentsGetTags(
   client: NovuCore,
@@ -106,7 +108,6 @@ async function $do(
       charEncoding: "percent",
     }),
   };
-
   const path = pathToFunc("/v2/environments/{environmentId}/tags")(pathParams);
 
   const headers = new Headers(compactMap({
@@ -119,7 +120,7 @@ async function $do(
   }));
 
   const securityInput = await extractSecurity(client._options.security);
-  const requestSecurity = resolveGlobalSecurity(securityInput);
+  const requestSecurity = resolveGlobalSecurity(securityInput, [1, 0]);
 
   const context = {
     options: client._options,

@@ -1,4 +1,6 @@
+import { Client } from '@sendgrid/client';
 import { MailService } from '@sendgrid/mail';
+import { EmailEventStatusEnum } from '@novu/stateless';
 import { expect, test, vi } from 'vitest';
 import { SendgridEmailProvider } from './sendgrid.provider';
 
@@ -167,4 +169,60 @@ test('should override credentials with mail data', async () => {
     ...{ ipPoolName: 'ip_from_mail_data' },
   });
   expect(sendMock).toHaveBeenCalledWith(expect.objectContaining({ ipPoolName: 'ip_from_mail_data' }));
+});
+
+test('should set EU data residency when region is eu', async () => {
+  const setDataResidencySpy = vi.spyOn(Client.prototype, 'setDataResidency');
+
+  new SendgridEmailProvider({
+    ...mockConfig,
+    region: 'eu',
+  });
+
+  expect(setDataResidencySpy).toHaveBeenCalledWith('eu');
+});
+
+test('should not set data residency when region is global', async () => {
+  const setDataResidencySpy = vi.spyOn(Client.prototype, 'setDataResidency');
+  setDataResidencySpy.mockClear();
+
+  new SendgridEmailProvider({
+    ...mockConfig,
+    region: 'global',
+  });
+
+  expect(setDataResidencySpy).not.toHaveBeenCalled();
+});
+
+test('should not set data residency when region is not provided', async () => {
+  const setDataResidencySpy = vi.spyOn(Client.prototype, 'setDataResidency');
+  setDataResidencySpy.mockClear();
+
+  new SendgridEmailProvider(mockConfig);
+
+  expect(setDataResidencySpy).not.toHaveBeenCalled();
+});
+
+test('parseEventBody maps SendGrid blocked event to BLOCKED status', () => {
+  const provider = new SendgridEmailProvider(mockConfig);
+  const externalId = 'sg-msg-blocked-1';
+
+  const result = provider.parseEventBody(
+    {
+      id: externalId,
+      event: 'blocked',
+      attempt: '1',
+      response: 'blocked by suppression',
+    },
+    externalId
+  );
+
+  expect(result).toEqual({
+    status: EmailEventStatusEnum.BLOCKED,
+    date: expect.any(String),
+    externalId,
+    attempts: 1,
+    response: 'blocked by suppression',
+    row: expect.any(String),
+  });
 });

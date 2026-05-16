@@ -1,5 +1,5 @@
 import { ResourceOriginEnum, StepCreateDto, WorkflowResponseDto } from '@novu/shared';
-import { Node, ReactFlowInstance, useEdgesState, useNodesState } from '@xyflow/react';
+import { Node, ReactFlowInstance } from '@xyflow/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useEnvironment } from '@/context/environment/hooks';
@@ -10,10 +10,13 @@ import { getIdFromSlug, STEP_DIVIDER } from '@/utils/id-utils';
 import { buildRoute, ROUTES } from '@/utils/routes';
 import { Step } from '@/utils/types';
 import { generateUUID } from '@/utils/uuid';
+import { AddStepMenuSelection } from './add-step-menu';
+import { AddNodeEdgeType } from './edges';
 import {
+  createAddNode,
   createEdges,
   createNode,
-  generateNodesAndEdges,
+  createTriggerNode,
   mapStepToNode,
   mapStepToNodeContent,
   NODE_TYPE_TO_STEP_TYPE,
@@ -23,6 +26,7 @@ import {
 import { NodeData } from './nodes';
 import { createStep } from './step-utils';
 import { showErrorToast } from './toasts';
+import { useAnimatedNodes } from './use-animated-nodes';
 import { useWorkflow } from './workflow-provider';
 
 function isIntersecting(el1: Element, el2: Element) {
@@ -45,13 +49,15 @@ function isIntersecting(el1: Element, el2: Element) {
 }
 
 export const useCanvasNodesEdges = ({
-  steps,
+  steps: currentSteps,
   showStepPreview: currentShowStepPreview,
   reactFlowInstance: currentReactFlowInstance,
+  reactFlowWrapper,
 }: {
   steps: Step[];
   showStepPreview?: boolean;
   reactFlowInstance: ReactFlowInstance;
+  reactFlowWrapper: React.RefObject<HTMLDivElement | null>;
 }) => {
   const navigate = useNavigate();
   const { currentEnvironment } = useEnvironment();
@@ -60,44 +66,32 @@ export const useCanvasNodesEdges = ({
     limit: 100,
     refetchOnWindowFocus: false,
   });
-
-  const { nodes: initialNodes, edges: initialEdges } = useMemo(() => {
-    return generateNodesAndEdges(steps, currentShowStepPreview ?? false, currentWorkflow, currentEnvironment);
-  }, [steps, currentShowStepPreview, currentWorkflow, currentEnvironment]);
-  // to have a nice animation in the workflow canvas, we need to store the nodes and edges in the state and perform the updates on the state
-  const [currentNodes, setNodes] = useNodesState(initialNodes);
-  const [currentEdges, setEdges] = useEdgesState(initialEdges);
+  const [targetNodes, setTargetNodes] = useState<Node<NodeData, keyof typeof nodeTypes>[]>([]);
   const [currentSelectedNodeId, setSelectedNodeId] = useState<string | undefined>();
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
   const [intersectingNodeId, setIntersectingNodeId] = useState<string | null>(null);
   const [intersectingEdgeId, setIntersectingEdgeId] = useState<string | null>(null);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const clickTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const { nodes: animatedNodes, animatingNodeIds } = useAnimatedNodes(targetNodes);
+
+  const edges = useMemo<AddNodeEdgeType[]>(
+    () => createEdges(animatedNodes, currentShowStepPreview),
+    [animatedNodes, currentShowStepPreview]
+  );
+
   const dataRef = useDataRef({
     step: currentStep,
     reactFlowInstance: currentReactFlowInstance,
     selectedNodeId: currentSelectedNodeId,
     environment: currentEnvironment,
     workflow: currentWorkflow,
-    nodes: currentNodes,
-    edges: currentEdges,
+    nodes: targetNodes,
+    edges,
     isTemplateStorePreview: currentShowStepPreview ?? false,
+    containerWidth: reactFlowWrapper.current?.clientWidth ?? 0,
+    steps: currentSteps,
   });
-
-  const updateEdges = useCallback(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
-
-    timeoutRef.current = setTimeout(() => {
-      setEdges(createEdges(dataRef.current.nodes, dataRef.current.isTemplateStorePreview));
-      timeoutRef.current = null;
-    }, 150);
-  }, [dataRef, setEdges]);
-
-  const removeEdges = useCallback(() => {
-    setEdges([]);
-  }, [setEdges]);
 
   const insertStep = useCallback(
     (
@@ -126,7 +120,7 @@ export const useCanvasNodesEdges = ({
         nodes.find((node) => node.type === 'add'),
       ].filter((node) => node !== undefined);
 
-      setNodes(recalculatePositionAndIndex(updatedNodes));
+      setTargetNodes(recalculatePositionAndIndex(updatedNodes, dataRef.current.containerWidth));
 
       const updatedSteps = [
         ...workflow.steps.slice(0, insertIndex).map((step) => ({
@@ -159,7 +153,7 @@ export const useCanvasNodesEdges = ({
 
             setSelectedNodeId(insertNode.id);
 
-            setNodes(
+            setTargetNodes(
               recalculatePositionAndIndex(
                 updatedNodes.map((node, index) => {
                   if (index === insertedNodeIndex) {
@@ -172,8 +166,10 @@ export const useCanvasNodesEdges = ({
                     // preserve the id of the node to reduce the re-render of the nodes and blinking
                     return { ...node, data: newNodeData };
                   }
+
                   return { ...node, data: { ...node.data, isPending: false } };
-                })
+                }),
+                dataRef.current.containerWidth
               )
             );
 
@@ -198,36 +194,38 @@ export const useCanvasNodesEdges = ({
           },
           onError: () => {
             options?.onError?.();
-            setNodes(recalculatePositionAndIndex(oldNodes));
+            setTargetNodes(recalculatePositionAndIndex(oldNodes, dataRef.current.containerWidth));
           },
         }
       );
     },
-    [setNodes, navigate, update, dataRef]
+    [navigate, update, dataRef]
   );
 
   const addNode = useCallback(
-    (insertIndex: number, type: keyof typeof NODE_TYPE_TO_STEP_TYPE) => {
+    (insertIndex: number, selection: AddStepMenuSelection | keyof typeof NODE_TYPE_TO_STEP_TYPE) => {
       const workflow = dataRef.current.workflow;
       if (!workflow) return;
+
+      const selectionType = typeof selection === 'string' ? NODE_TYPE_TO_STEP_TYPE[selection] : selection.type;
 
       const defaultLayout = layoutsResponse?.layouts.find((layout) => layout.isDefault);
       const addDefaultLayout = !!defaultLayout;
       const defaultLayoutId = defaultLayout?.layoutId;
 
-      const stepType = NODE_TYPE_TO_STEP_TYPE[type];
-      const newStep = createStep(stepType, addDefaultLayout ? defaultLayoutId : undefined, workflow.severity);
+      const newStep = createStep(selectionType, addDefaultLayout ? defaultLayoutId : undefined, workflow.severity);
+      const nodeName = `${STEP_TYPE_LABELS[selectionType]} Step`;
       const newNode = createNode({
         x: 0,
         y: 0,
-        name: `${STEP_TYPE_LABELS[stepType]} Step`,
-        content: mapStepToNodeContent(stepType, newStep.controlValues ?? {}, ResourceOriginEnum.NOVU_CLOUD),
+        name: nodeName,
+        content: mapStepToNodeContent(selectionType, newStep.controlValues ?? {}, ResourceOriginEnum.NOVU_CLOUD),
         index: insertIndex,
         stepSlug: '_st_',
         error: '',
         controlValues: newStep.controlValues ?? {},
         isPending: true,
-        type: stepType,
+        type: selectionType,
       });
 
       insertStep(insertIndex, newNode, newStep, {
@@ -289,10 +287,8 @@ export const useCanvasNodesEdges = ({
         },
         {
           onSuccess: () => {
-            const newNodes = [...dataRef.current.nodes];
-            newNodes.splice(removeIndex, 1);
-            setNodes(recalculatePositionAndIndex(newNodes));
-            updateEdges();
+            const newNodes = [...dataRef.current.nodes].filter((node) => node.id !== nodeToRemove.id);
+            setTargetNodes(recalculatePositionAndIndex(newNodes, dataRef.current.containerWidth));
             options?.onSuccess?.();
 
             // navigate to the workflow editor
@@ -309,12 +305,12 @@ export const useCanvasNodesEdges = ({
           onError: () => {
             showErrorToast('Failed to remove node');
             options?.onError?.();
-            setNodes(recalculatePositionAndIndex(oldNodes));
+            setTargetNodes(recalculatePositionAndIndex(oldNodes, dataRef.current.containerWidth));
           },
         }
       );
     },
-    [setNodes, dataRef, navigate, update, updateEdges]
+    [dataRef, navigate, update]
   );
 
   const reorderSteps = useCallback(
@@ -338,8 +334,8 @@ export const useCanvasNodesEdges = ({
       if (selectedNode) {
         setSelectedNodeId(selectedNode.id);
       }
-      setNodes(recalculatePositionAndIndex(newNodes));
-      removeEdges();
+      const newNodesWithPosition = recalculatePositionAndIndex(newNodes, dataRef.current.containerWidth);
+      setTargetNodes(newNodesWithPosition);
 
       update(
         {
@@ -349,30 +345,21 @@ export const useCanvasNodesEdges = ({
         {
           onSuccess: () => {
             const finalNodes = recalculatePositionAndIndex(
-              newNodes.map((node) => ({ ...node, data: { ...node.data, isPending: false } }))
+              newNodesWithPosition.map((node) => ({ ...node, data: { ...node.data, isPending: false } })),
+              dataRef.current.containerWidth
             );
-
-            setNodes(finalNodes);
-            updateEdges();
-            const reactFlowInstance = dataRef.current.reactFlowInstance;
-            // force updating the ids to regenerate the edges
-            for (const node of finalNodes) {
-              reactFlowInstance.updateNode(node.id, {
-                id: generateUUID(),
-              });
-            }
+            setTargetNodes(finalNodes);
             options?.onSuccess?.();
           },
           onError: () => {
             showErrorToast('Failed to reorder nodes');
             options?.onError?.();
-            setNodes(recalculatePositionAndIndex(oldNodes));
-            updateEdges();
+            setTargetNodes(recalculatePositionAndIndex(oldNodes, dataRef.current.containerWidth));
           },
         }
       );
     },
-    [setNodes, updateEdges, removeEdges, dataRef, update]
+    [dataRef, update]
   );
 
   const handleNodeDragStart = useCallback(
@@ -470,6 +457,7 @@ export const useCanvasNodesEdges = ({
       setDraggedNodeId(null);
       setIntersectingNodeId(null);
       setIntersectingEdgeId(null);
+
       return;
     }
 
@@ -590,9 +578,9 @@ export const useCanvasNodesEdges = ({
       }
 
       if (goto === 'editor') {
-        const isTemplateConfigurable = TEMPLATE_CONFIGURABLE_STEP_TYPES.includes(
-          NODE_TYPE_TO_STEP_TYPE[potentialNode?.type as keyof typeof NODE_TYPE_TO_STEP_TYPE]
-        );
+        const stepType = NODE_TYPE_TO_STEP_TYPE[potentialNode?.type as keyof typeof NODE_TYPE_TO_STEP_TYPE];
+        const isTemplateConfigurable = TEMPLATE_CONFIGURABLE_STEP_TYPES.includes(stepType);
+
         if (isTemplateConfigurable) {
           navigate(
             buildRoute(ROUTES.EDIT_STEP_TEMPLATE, {
@@ -606,6 +594,7 @@ export const useCanvasNodesEdges = ({
             })
           );
         }
+
         return;
       }
 
@@ -624,65 +613,67 @@ export const useCanvasNodesEdges = ({
   }, []);
 
   useEffect(() => {
-    // handle workflow/step updates from the server with a slight delay to
-    // get the latest nodes and edges changes in state first
-    // the steps can be updated or deleted outside of the workflow canvas, so we need to handle that
+    if (!currentWorkflow && dataRef.current.steps.length === 0) return;
+
     const timeout = setTimeout(() => {
-      if (currentWorkflow) {
-        const nodes = dataRef.current.nodes;
-        const step = dataRef.current.step;
-        const triggerNode = nodes.find((node) => node.type === 'trigger');
-        const addNode = nodes.find((node) => node.type === 'add');
+      const steps = currentWorkflow?.steps ?? dataRef.current.steps;
 
-        const newNodes = currentWorkflow.steps.map((step) => {
-          const foundNode = nodes.find(
-            (node) =>
-              getIdFromSlug({ slug: step.slug, divider: STEP_DIVIDER }) ===
-              getIdFromSlug({ slug: node.data.stepSlug ?? '', divider: STEP_DIVIDER })
-          );
+      const nodes = dataRef.current.nodes;
+      const step = dataRef.current.step;
+      const containerWidth = reactFlowWrapper.current?.clientWidth ?? 0;
+      const currentEnvironment = dataRef.current.environment;
 
-          const newNode = mapStepToNode({
-            step,
-            previousPosition: foundNode?.position ?? { x: 0, y: 0 },
-            index: foundNode?.data.index ?? 0,
-          });
-
-          if (foundNode) {
-            return { ...foundNode, data: newNode.data };
-          }
-
-          return newNode;
-        });
-        const finalNodes = [triggerNode, ...newNodes, addNode].filter((node) => node !== undefined);
-        const finalSelectedNode = finalNodes.find(
+      const newNodes = steps.map((step) => {
+        const foundNode = nodes.find(
           (node) =>
-            getIdFromSlug({ slug: step?.slug ?? '', divider: STEP_DIVIDER }) ===
+            getIdFromSlug({ slug: step.slug, divider: STEP_DIVIDER }) ===
             getIdFromSlug({ slug: node.data.stepSlug ?? '', divider: STEP_DIVIDER })
         );
-        if (step && finalSelectedNode) {
-          setSelectedNodeId(finalSelectedNode.id);
+
+        const newNode = mapStepToNode({
+          step,
+          previousPosition: foundNode?.position ?? { x: 0, y: 0 },
+          index: foundNode?.data.index ?? 0,
+        });
+
+        if (foundNode) {
+          return { ...foundNode, data: newNode.data };
         }
-        setNodes(recalculatePositionAndIndex(finalNodes));
-        updateEdges();
+
+        return newNode;
+      });
+      const triggerNode =
+        nodes.find((node) => node.type === 'trigger') ??
+        createTriggerNode(currentWorkflow, currentEnvironment, containerWidth);
+      const previousPosition = newNodes[newNodes.length - 1]?.position ?? triggerNode.position;
+      const addNode = nodes.find((node) => node.type === 'add') ?? createAddNode(previousPosition, newNodes);
+      const finalNodes = [triggerNode, ...newNodes, addNode].filter((node) => node !== undefined);
+      const finalSelectedNode = finalNodes.find(
+        (node) =>
+          getIdFromSlug({ slug: step?.slug ?? '', divider: STEP_DIVIDER }) ===
+          getIdFromSlug({ slug: node.data.stepSlug ?? '', divider: STEP_DIVIDER })
+      );
+      if (step && finalSelectedNode) {
+        setSelectedNodeId(finalSelectedNode.id);
       }
-    }, 150);
+      setTargetNodes(recalculatePositionAndIndex(finalNodes, containerWidth));
+    }, 0);
 
     return () => {
       clearTimeout(timeout);
     };
-  }, [dataRef, currentWorkflow, setNodes, updateEdges]);
+  }, [dataRef, currentWorkflow, reactFlowWrapper]);
 
   return {
     selectedNodeId: currentSelectedNodeId,
     selectNode,
     unselectNode,
-    nodes: currentNodes,
-    edges: currentEdges,
+    nodes: animatedNodes,
+    edges,
     draggedNodeId,
     intersectingNodeId,
     intersectingEdgeId,
-    removeEdges,
-    updateEdges,
+    animatingNodeIds,
     onNodeDragStart: handleNodeDragStart,
     onNodeDragMove: handleNodeDragMove,
     onNodeDragEnd: handleNodeDragEnd,
